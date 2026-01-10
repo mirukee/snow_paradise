@@ -1,259 +1,95 @@
 import 'package:flutter/material.dart';
-import '../data/dummy_data.dart';
-import 'detail_screen.dart';
 
-class ShopScreen extends StatefulWidget {
+class ShopScreen extends StatelessWidget {
   const ShopScreen({super.key});
 
-  @override
-  State<ShopScreen> createState() => _ShopScreenState();
-}
-
-class _ShopScreenState extends State<ShopScreen> {
-  final Set<String> _favoriteIds = {};
-
-  String _formatPrice(int price) {
-    final priceString = price.toString();
-    final buffer = StringBuffer('');
-    for (int i = 0; i < priceString.length; i++) {
-      if (i > 0 && (priceString.length - i) % 3 == 0) {
-        buffer.write(',');
-      }
-      buffer.write(priceString[i]);
-    }
-    buffer.write('원');
-    return buffer.toString();
-  }
-
-  void _toggleFavorite(String productId) {
-    setState(() {
-      if (_favoriteIds.contains(productId)) {
-        _favoriteIds.remove(productId);
-      } else {
-        _favoriteIds.add(productId);
-      }
-    });
-  }
+  // 카테고리 데이터
+  final List<Map<String, dynamic>> categories = const [
+    {'title': '스키', 'icon': Icons.downhill_skiing},
+    {'title': '스노우보드', 'icon': Icons.snowboarding},
+    {'title': '의류', 'icon': Icons.checkroom},
+    {'title': '장비/보호구', 'icon': Icons.shield}, // 헬멧, 보호대 등
+    {'title': '시즌권', 'icon': Icons.confirmation_number},
+    {'title': '시즌방', 'icon': Icons.home},
+    {'title': '강습', 'icon': Icons.school},
+    {'title': '기타', 'icon': Icons.more_horiz},
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        title: const Text(
+          '카테고리',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.black),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('메뉴 기능은 준비 중입니다.')),
-            );
+        automaticallyImplyLeading: false, // 탭 화면이므로 뒤로가기 숨김
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: GridView.builder(
+          itemCount: categories.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, // 한 줄에 2개씩
+            mainAxisSpacing: 16, // 세로 간격
+            crossAxisSpacing: 16, // 가로 간격
+            childAspectRatio: 1.5, // 가로가 조금 더 긴 직사각형 (비율 조절 가능)
+          ),
+          itemBuilder: (context, index) {
+            return _buildCategoryCard(context, categories[index]);
           },
         ),
-        title: const Text(
-          '쇼핑',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: Colors.black),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('검색 기능은 준비 중입니다.')),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.black),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('알림 기능은 준비 중입니다.')),
-              );
-            },
-          ),
-        ],
       ),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(10),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.65,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-        ),
-        itemCount: dummyProducts.length,
-        itemBuilder: (context, index) {
-          final product = dummyProducts[index];
-          final isFavorite = _favoriteIds.contains(product.id);
+    );
+  }
 
-          return GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => DetailScreen(product: product),
-                ),
-              );
-            },
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.all(Radius.circular(8)),
+  Widget _buildCategoryCard(BuildContext context, Map<String, dynamic> category) {
+    return InkWell(
+      onTap: () {
+        // 나중에 리스트 화면으로 이동
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${category['title']} 보러가기 (준비 중)')),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[50], // 아주 연한 회색 배경
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 아이콘 원형 배경
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1), // 테마색 연하게
+                shape: BoxShape.circle,
               ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  // 이미지 영역
-                  Expanded(
-                    flex: 7,
-                    child: Stack(
-                      children: [
-                        // 상품 이미지
-                        Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(8),
-                              topRight: Radius.circular(8),
-                            ),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              product.imageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Center(
-                                  child: Icon(
-                                    Icons.image_not_supported,
-                                    color: Colors.grey,
-                                    size: 40,
-                                  ),
-                                );
-                              },
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return const Center(
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        // 찜하기 버튼 (우측 상단, 반투명)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: GestureDetector(
-                            onTap: () => _toggleFavorite(product.id),
-                            behavior: HitTestBehavior.opaque,
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.4),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                color: isFavorite ? Colors.red : Colors.white,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // 정보 영역
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 10,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          // 브랜드명 (13px, 굵게, 검정)
-                          Text(
-                            product.brand,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              height: 1.2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          // 상품명 (13px, 일반, 짙은 회색)
-                          Text(
-                            product.title,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.normal,
-                              color: Colors.grey[800],
-                              height: 1.3,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          // 가격과 상태 태그
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              // 가격 (15px, w700, 검정)
-                              Text(
-                                _formatPrice(product.price),
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                  height: 1.0,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(width: 6),
-                              // 상태 태그 (11px, 회색)
-                              Text(
-                                '즉시 구매가',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.normal,
-                                  color: Colors.grey[600],
-                                  height: 1.0,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              child: Icon(
+                category['icon'],
+                size: 32,
+                color: Theme.of(context).primaryColor, // 테마색 진하게
               ),
             ),
-          );
-        },
+            const SizedBox(height: 12),
+            // 카테고리 이름
+            Text(
+              category['title'],
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
-

@@ -29,43 +29,49 @@ class HomeTab extends StatelessWidget {
           children: [
             // 상단 여백 (상태바 대체)
             const SizedBox(height: 16),
-            // 1. 상단 브랜딩 및 검색바
+            
+            // 1. 상단 브랜딩 및 검색바 (수정됨)
             Container(
               height: 60,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // 로고 이미지 액자 (고정 크기 120x45)
+                  // [수정 포인트] 로고 이미지 영역
+                  // Transform.scale을 사용하여 강제로 1.5배 확대 (여백 잘라내기 효과)
                   Container(
-                    width: 160,
+                    width: 140, // 너비를 살짝 줄여서 검색창 공간 확보
                     height: 45,
-                    clipBehavior: Clip.hardEdge,
+                    clipBehavior: Clip.hardEdge, // 확대된 이미지가 네모칸 밖으로 나가지 않게 자름
                     decoration: BoxDecoration(
+                      // 영역 확인용 (나중에 투명으로 바꾸거나 삭제 가능)
+                      color: Colors.transparent, 
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      fit: BoxFit.fitHeight,
-                      alignment: Alignment.center,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Text(
-                            'Snow Paradise',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
+                    child: Transform.scale(
+                      scale: 1.1, // 1.5배 확대! (글씨가 커집니다)
+                      alignment: Alignment.centerLeft, // 왼쪽 기준으로 확대
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        fit: BoxFit.contain, // 비율 유지하며 안에 맞춤
+                        filterQuality: FilterQuality.high, // 고화질 렌더링
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Text(
+                              'Snow Paradise',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  
+                  const SizedBox(width: 12), // 간격 조정
+                  
                   // 검색바 (남은 공간 전체 사용)
                   Expanded(
                     child: Container(
@@ -97,6 +103,7 @@ class HomeTab extends StatelessWidget {
                 ],
               ),
             ),
+            
             const SizedBox(height: 24),
             // 2. 메인 카테고리 (SKI & SNOWBOARD)
             Padding(

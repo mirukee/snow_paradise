@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // [추가]
+import 'providers/product_service.dart'; // [추가]
 import 'screens/main_screen.dart';
+import 'screens/login_screen.dart';
 
 void main() {
-  runApp(const SnowParadiseApp());
+  runApp(
+    // [핵심] 앱 전체를 ChangeNotifierProvider로 감싸줍니다.
+    ChangeNotifierProvider(
+      create: (context) => ProductService(),
+      child: const SnowParadiseApp(),
+    ),
+  );
 }
 
 class SnowParadiseApp extends StatelessWidget {

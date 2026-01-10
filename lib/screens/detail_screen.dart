@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // [추가] Provider 패키지
 import '../models/product.dart';
+import '../providers/product_service.dart'; // [추가] ProductService
 
 class DetailScreen extends StatelessWidget {
   final Product product;
@@ -24,6 +26,10 @@ class DetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // [추가] Provider를 통해 찜 상태 실시간 감지
+    final productService = context.watch<ProductService>();
+    final isLiked = productService.isLiked(product.id);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('상품 상세'),
@@ -162,9 +168,7 @@ class DetailScreen extends StatelessWidget {
                     context,
                     '상태',
                     product.condition,
-                    product.condition == '거의 새것'
-                        ? Colors.green
-                        : Colors.orange,
+                    product.condition == '거의 새것' ? Colors.green : Colors.orange,
                   ),
                   const SizedBox(height: 12),
                   // 사이즈
@@ -219,6 +223,30 @@ class DetailScreen extends StatelessWidget {
           ),
           child: Row(
             children: [
+              // [추가] 찜하기 하트 버튼 (여기에 넣었습니다!)
+              Container(
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    productService.toggleLike(product.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(isLiked ? '관심 목록에서 제거했어요.' : '관심 목록에 추가했어요!'),
+                        duration: const Duration(milliseconds: 1000),
+                      ),
+                    );
+                  },
+                  icon: Icon(
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: isLiked ? Colors.red : Colors.grey,
+                  ),
+                ),
+              ),
+              
               // 채팅하기 버튼
               Expanded(
                 child: OutlinedButton(
@@ -315,4 +343,3 @@ class DetailScreen extends StatelessWidget {
     );
   }
 }
-

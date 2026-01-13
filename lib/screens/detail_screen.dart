@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // [추가] Provider 패키지
 import '../models/product.dart';
 import '../providers/product_service.dart'; // [추가] ProductService
+import '../providers/user_service.dart';
+import 'edit_product_screen.dart';
+import '../widgets/product_image.dart';
 
 class DetailScreen extends StatelessWidget {
   final Product product;
@@ -28,7 +31,17 @@ class DetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // [추가] Provider를 통해 찜 상태 실시간 감지
     final productService = context.watch<ProductService>();
-    final isLiked = productService.isLiked(product.id);
+    final currentUser = context.watch<UserService>().currentUser;
+    final currentProduct = productService.getProductById(product.id) ?? product;
+    final isLiked = productService.isLiked(currentProduct.id);
+    final currentUserId = currentUser?.uid;
+    final currentUserName = currentUser?.displayName ?? currentUser?.email ?? '';
+    final currentUserPhoto = currentUser?.photoURL ?? '';
+    final isOwner = currentUser != null &&
+        (currentProduct.sellerId.isNotEmpty
+            ? currentProduct.sellerId == currentUserId
+            : currentProduct.sellerName == currentUserName &&
+                currentProduct.sellerProfile == currentUserPhoto);
 
     return Scaffold(
       appBar: AppBar(
@@ -44,24 +57,13 @@ class DetailScreen extends StatelessWidget {
               width: double.infinity,
               height: 400,
               color: Colors.grey.shade200,
-              child: Image.network(
-                product.imageUrl,
+              child: buildProductImage(
+                currentProduct,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Icon(
-                      Icons.image_not_supported,
-                      color: Colors.grey,
-                      size: 80,
-                    ),
-                  );
-                },
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                },
+                errorIconSize: 80,
+                loadingWidget: const Center(
+                  child: CircularProgressIndicator(),
+                ),
               ),
             ),
             // 상품 정보 섹션
@@ -76,10 +78,10 @@ class DetailScreen extends StatelessWidget {
                       CircleAvatar(
                         radius: 25,
                         backgroundColor: Colors.grey.shade300,
-                        backgroundImage: product.sellerProfile.isNotEmpty
-                            ? NetworkImage(product.sellerProfile)
+                        backgroundImage: currentProduct.sellerProfile.isNotEmpty
+                            ? NetworkImage(currentProduct.sellerProfile)
                             : null,
-                        child: product.sellerProfile.isEmpty
+                        child: currentProduct.sellerProfile.isEmpty
                             ? const Icon(Icons.person, color: Colors.grey)
                             : null,
                       ),
@@ -89,7 +91,7 @@ class DetailScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              product.sellerName,
+                              currentProduct.sellerName,
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -119,7 +121,7 @@ class DetailScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              product.brand,
+                              currentProduct.brand,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Theme.of(context).colorScheme.primary,
@@ -128,7 +130,7 @@ class DetailScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              product.title,
+                              currentProduct.title,
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
@@ -143,7 +145,7 @@ class DetailScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   // 가격
                   Text(
-                    _formatPrice(product.price),
+                    _formatPrice(currentProduct.price),
                     style: TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -167,18 +169,18 @@ class DetailScreen extends StatelessWidget {
                   _buildInfoRow(
                     context,
                     '상태',
-                    product.condition,
-                    product.condition == '거의 새것' ? Colors.green : Colors.orange,
+                    currentProduct.condition,
+                    currentProduct.condition == '거의 새것' ? Colors.green : Colors.orange,
                   ),
                   const SizedBox(height: 12),
                   // 사이즈
-                  _buildInfoRow(context, '사이즈', product.size, null),
+                  _buildInfoRow(context, '사이즈', currentProduct.size, null),
                   const SizedBox(height: 12),
                   // 연식
-                  _buildInfoRow(context, '연식', product.year, null),
+                  _buildInfoRow(context, '연식', currentProduct.year, null),
                   const SizedBox(height: 12),
                   // 브랜드
-                  _buildInfoRow(context, '브랜드', product.brand, null),
+                  _buildInfoRow(context, '브랜드', currentProduct.brand, null),
                   const SizedBox(height: 24),
                   // 구분선
                   Divider(color: Colors.grey.shade300, thickness: 1),
@@ -193,7 +195,7 @@ class DetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    product.description,
+                    currentProduct.description,
                     style: TextStyle(
                       fontSize: 15,
                       height: 1.6,
@@ -221,92 +223,205 @@ class DetailScreen extends StatelessWidget {
               ),
             ],
           ),
-          child: Row(
-            children: [
-              // [추가] 찜하기 하트 버튼 (여기에 넣었습니다!)
-              Container(
-                margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
+          child: isOwner
+              ? _buildOwnerActions(context, currentProduct)
+              : _buildBuyerActions(
+                  context,
+                  currentProduct,
+                  productService,
+                  isLiked,
                 ),
-                child: IconButton(
-                  onPressed: () {
-                    productService.toggleLike(product.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(isLiked ? '관심 목록에서 제거했어요.' : '관심 목록에 추가했어요!'),
-                        duration: const Duration(milliseconds: 1000),
-                      ),
-                    );
-                  },
-                  icon: Icon(
-                    isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: isLiked ? Colors.red : Colors.grey,
-                  ),
-                ),
-              ),
-              
-              // 채팅하기 버튼
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('채팅하기 기능은 준비 중입니다.')),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 1.5,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: Text(
-                    '채팅하기',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // 구매하기 버튼
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('구매하기 기능은 준비 중입니다.')),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    '구매하기',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOwnerActions(BuildContext context, Product product) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditProductScreen(product: product),
+                ),
+              );
+              if (result == true) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('수정 완료!')),
+                );
+              }
+            },
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 1.5,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              '수정하기',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('상품 삭제'),
+                  content: const Text('정말 삭제하시겠어요?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('취소'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text(
+                        '삭제',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm != true) return;
+
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await context.read<ProductService>().removeProduct(product.id);
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('삭제 완료!')),
+                );
+              } catch (_) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('삭제에 실패했습니다.')),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              '삭제하기',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBuyerActions(
+    BuildContext context,
+    Product product,
+    ProductService productService,
+    bool isLiked,
+  ) {
+    return Row(
+      children: [
+        Container(
+          margin: const EdgeInsets.only(right: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: IconButton(
+            onPressed: () {
+              productService.toggleLike(product.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(isLiked ? '관심 목록에서 제거했어요.' : '관심 목록에 추가했어요!'),
+                  duration: const Duration(milliseconds: 1000),
+                ),
+              );
+            },
+            icon: Icon(
+              isLiked ? Icons.favorite : Icons.favorite_border,
+              color: isLiked ? Colors.red : Colors.grey,
+            ),
+          ),
+        ),
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('채팅하기 기능은 준비 중입니다.')),
+              );
+            },
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 1.5,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              '채팅하기',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('구매하기 기능은 준비 중입니다.')),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              '구매하기',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

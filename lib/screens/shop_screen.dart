@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'category_product_screen.dart';
 
 class ShopScreen extends StatelessWidget {
   const ShopScreen({super.key});
@@ -47,11 +48,15 @@ class ShopScreen extends StatelessWidget {
   }
 
   Widget _buildCategoryCard(BuildContext context, Map<String, dynamic> category) {
+    final title = category['title'] as String;
+    final iconData = category['icon'] as IconData;
     return InkWell(
       onTap: () {
-        // 나중에 리스트 화면으로 이동
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${category['title']} 보러가기 (준비 중)')),
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CategoryProductScreen(category: title),
+          ),
         );
       },
       borderRadius: BorderRadius.circular(16),
@@ -72,7 +77,7 @@ class ShopScreen extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                category['icon'],
+                iconData,
                 size: 32,
                 color: Theme.of(context).primaryColor, // 테마색 진하게
               ),
@@ -80,7 +85,7 @@ class ShopScreen extends StatelessWidget {
             const SizedBox(height: 12),
             // 카테고리 이름
             Text(
-              category['title'],
+              title,
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,

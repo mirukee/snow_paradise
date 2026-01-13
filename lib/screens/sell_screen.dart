@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // 숫자 입력 제한용
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import '../models/product.dart';
+import '../providers/product_service.dart';
+import '../providers/main_tab_provider.dart';
+import '../providers/user_service.dart';
+import '../widgets/product_image.dart';
 
 class SellScreen extends StatefulWidget {
   const SellScreen({super.key});
@@ -13,14 +20,14 @@ class _SellScreenState extends State<SellScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
+  bool _isUploading = false;
 
   // 선택된 카테고리를 저장할 변수
   String _selectedCategory = '기타';
   final List<String> _categories = ['스키', '스노우보드', '의류', '시즌권', '시즌방', '기타'];
   
-  // 가짜 이미지 리스트 (UI 테스트용)
-  // 나중에 image_picker 패키지를 쓰면 실제 파일로 바뀝니다.
-  final List<String> _selectedImages = [];
+  final ImagePicker _imagePicker = ImagePicker();
+  final List<XFile> _selectedImages = [];
 
   // 가격 포맷팅 (숫자만 입력받아 3자리마다 콤마 찍기)
   void _formatPrice(String value) {
@@ -42,6 +49,33 @@ class _SellScreenState extends State<SellScreen> {
     );
   }
 
+  Future<void> _pickImage() async {
+    if (_selectedImages.length >= 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사진은 최대 10장까지 선택할 수 있어요.')),
+      );
+      return;
+    }
+
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1080,
+        imageQuality: 80,
+      );
+      if (picked == null) return;
+      if (!mounted) return;
+      setState(() {
+        _selectedImages.add(picked);
+      });
+    } on PlatformException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사진을 불러오지 못했어요. 권한을 확인해주세요.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -61,33 +95,107 @@ class _SellScreenState extends State<SellScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              // 등록 완료 처리 (추후 구현)
-              if (_titleController.text.isEmpty || _priceController.text.isEmpty) {
+            onPressed: _isUploading
+                ? null
+                : () async {
+              final title = _titleController.text.trim();
+              final priceText = _priceController.text.replaceAll(',', '').trim();
+              final description = _descController.text.trim();
+
+              if (title.isEmpty || priceText.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('제목과 가격을 입력해주세요.')),
                 );
-              } else {
+                return;
+              }
+
+              final price = int.tryParse(priceText);
+              if (price == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('상품이 등록되었습니다! (가짜)')),
+                  const SnackBar(content: Text('가격을 올바르게 입력해주세요.')),
                 );
-                // 입력창 초기화
+                return;
+              }
+
+              final productId = DateTime.now().millisecondsSinceEpoch.toString();
+              final now = DateTime.now();
+              final currentUser = context.read<UserService>().currentUser;
+              if (currentUser == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('로그인이 필요합니다.')),
+                );
+                return;
+              }
+              final sellerName = currentUser.displayName ?? currentUser.email ?? '익명';
+              final sellerProfile = currentUser.photoURL ?? '';
+              final localImagePath =
+                  _selectedImages.isNotEmpty ? _selectedImages.first.path : null;
+              final product = Product(
+                id: productId,
+                createdAt: now,
+                title: title,
+                price: price,
+                brand: _selectedCategory,
+                category: _selectedCategory,
+                condition: '중고',
+                imageUrl: '',
+                localImagePath: localImagePath,
+                description: description,
+                size: 'Free',
+                year: '${now.year}년',
+                sellerName: sellerName,
+                sellerProfile: sellerProfile,
+                sellerId: currentUser.uid,
+              );
+
+              final messenger = ScaffoldMessenger.of(context);
+              setState(() {
+                _isUploading = true;
+              });
+              try {
+                await context.read<ProductService>().addProduct(product);
+                if (!mounted) return;
                 _titleController.clear();
                 _priceController.clear();
                 _descController.clear();
                 setState(() {
                   _selectedImages.clear();
                 });
+                final navigator = Navigator.of(context);
+                if (navigator.canPop()) {
+                  navigator.pop();
+                } else {
+                  context.read<MainTabProvider>().setIndex(0);
+                }
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('등록 완료!')),
+                );
+              } catch (_) {
+                if (!mounted) return;
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('업로드에 실패했습니다.')),
+                );
+              } finally {
+                if (!mounted) return;
+                setState(() {
+                  _isUploading = false;
+                });
               }
             },
-            child: const Text(
-              '완료',
-              style: TextStyle(
-                color: Colors.orange, // 포인트 컬러
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
+            child: _isUploading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text(
+                    '완료',
+                    style: TextStyle(
+                      color: Colors.orange, // 포인트 컬러
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
           )
         ],
       ),
@@ -102,19 +210,12 @@ class _SellScreenState extends State<SellScreen> {
                 children: [
                   // 카메라 버튼
                   GestureDetector(
-                    onTap: () {
-                      // 실제로는 여기서 갤러리를 엽니다.
-                      // 지금은 UI 테스트를 위해 가짜 회색 박스를 추가합니다.
-                      setState(() {
-                        if (_selectedImages.length < 10) {
-                          _selectedImages.add('dummy_image');
-                        }
-                      });
-                    },
+                    onTap: _pickImage,
                     child: Container(
                       width: 70,
                       height: 70,
                       decoration: BoxDecoration(
+                        color: Colors.grey[100],
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -151,12 +252,21 @@ class _SellScreenState extends State<SellScreen> {
                                   width: 70,
                                   height: 70,
                                   decoration: BoxDecoration(
-                                    color: Colors.grey[200], // 이미지 대신 회색 배경
+                                    color: Colors.grey[200],
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: Colors.grey[200]!),
                                   ),
-                                  // 실제 이미지가 있다면 Image.file(...) 등을 사용
-                                  child: const Icon(Icons.image, color: Colors.grey),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: buildLocalImageFromPath(
+                                      _selectedImages[index].path,
+                                      fit: BoxFit.cover,
+                                      errorIconSize: 24,
+                                      loadingWidget: const Center(
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                                 // 삭제 버튼 (X)
                                 Positioned(

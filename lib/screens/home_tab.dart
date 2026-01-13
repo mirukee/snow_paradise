@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import '../data/dummy_data.dart';
+import 'package:provider/provider.dart';
 import '../models/product.dart';
+import '../providers/product_service.dart';
 import 'detail_screen.dart';
+import 'search_screen.dart';
+import '../widgets/product_image.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -21,6 +24,8 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final products = context.watch<ProductService>().productList;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
@@ -74,29 +79,48 @@ class HomeTab extends StatelessWidget {
                   
                   // 검색바 (남은 공간 전체 사용)
                   Expanded(
-                    child: Container(
-                      height: 45,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
                         borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.search, color: Colors.grey[600], size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '브랜드, 모델명, 사이즈 등 검색',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[600],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        onTap: () {
+                          // 홈 검색바 탭 시 검색 화면으로 이동
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SearchScreen(),
                             ),
+                          );
+                        },
+                        child: Container(
+                          height: 45,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ],
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.search,
+                                color: Colors.grey[600],
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '브랜드, 모델명, 사이즈 등 검색',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[600],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -187,7 +211,7 @@ class HomeTab extends StatelessWidget {
                   // 가로 스크롤 상품 리스트
                   SizedBox(
                     height: 260,
-                    child: dummyProducts.isEmpty
+                    child: products.isEmpty
                         ? const Center(
                             child: Text(
                               '상품이 없습니다',
@@ -199,15 +223,15 @@ class HomeTab extends StatelessWidget {
                           )
                         : ListView.builder(
                             scrollDirection: Axis.horizontal,
-                            itemCount: dummyProducts.length,
+                            itemCount: products.length,
                             itemBuilder: (context, index) {
-                              if (index >= dummyProducts.length) {
+                              if (index >= products.length) {
                                 return const SizedBox.shrink();
                               }
-                              final product = dummyProducts[index];
+                              final product = products[index];
                               return Padding(
                                 padding: EdgeInsets.only(
-                                  right: index < dummyProducts.length - 1 ? 12 : 0,
+                                  right: index < products.length - 1 ? 12 : 0,
                                 ),
                                 child: _buildPopularProductCard(context, product),
                               );
@@ -395,29 +419,14 @@ class HomeTab extends StatelessWidget {
                   topLeft: Radius.circular(8),
                   topRight: Radius.circular(8),
                 ),
-                child: product.imageUrl.isNotEmpty
-                    ? Image.network(
-                        product.imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
-                            Icons.image_not_supported,
-                            color: Colors.grey,
-                            size: 30,
-                          );
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          );
-                        },
-                      )
-                    : const Icon(
-                        Icons.image_not_supported,
-                        color: Colors.grey,
-                        size: 30,
-                      ),
+                child: buildProductImage(
+                  product,
+                  fit: BoxFit.cover,
+                  errorIconSize: 30,
+                  loadingWidget: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
               ),
             ),
             // 상품 정보 영역 (나머지 공간)

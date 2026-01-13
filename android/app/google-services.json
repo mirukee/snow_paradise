@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "275135791976",
+    "project_id": "snow-paradise",
+    "storage_bucket": "snow-paradise.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:275135791976:android:07fd0f4f7ef33b6b418cdd",
+        "android_client_info": {
+          "package_name": "com.example.snow_paradise"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_BHmrAdq7kaULuGfbk8aUW8RUDx9pQGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

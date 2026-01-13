@@ -1,43 +1,59 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'home_tab.dart';
 import 'shop_screen.dart';
 import 'sell_screen.dart';
 import 'chat_screen.dart';
 import 'my_screen.dart';
+import 'search_screen.dart';
+import '../providers/main_tab_provider.dart';
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends StatelessWidget {
   const MainScreen({super.key});
 
-  @override
-  State<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
-
-  final List<Widget> _screens = [
-    const HomeTab(),
-    const ShopScreen(),
-    const SellScreen(),
-    const ChatScreen(),
-    const MyScreen(),
+  static const List<Widget> _screens = [
+    HomeTab(),
+    ShopScreen(),
+    SellScreen(),
+    ChatScreen(),
+    MyScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final currentIndex = context.watch<MainTabProvider>().currentIndex;
+
     return Scaffold(
       backgroundColor: Colors.white,
+      // 홈 탭에서만 검색 아이콘을 노출
+      appBar: currentIndex == 0
+          ? AppBar(
+              automaticallyImplyLeading: false,
+              title: const SizedBox.shrink(),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SearchScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            )
+          : null,
       body: IndexedStack(
-        index: _currentIndex,
+        index: currentIndex,
         children: _screens,
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
+        currentIndex: currentIndex,
         onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+          context.read<MainTabProvider>().setIndex(index);
         },
         backgroundColor: Colors.white,
         selectedItemColor: Colors.black,
@@ -76,4 +92,3 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
-

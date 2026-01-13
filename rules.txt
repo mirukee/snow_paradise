@@ -1,0 +1,32 @@
+나는 지금 'Snow Paradise'라는 Flutter 앱을 개발 중이야.
+이 프로젝트의 목표와 현재 진행 상황, 그리고 기술 스택을 알려줄 테니, 앞으로의 개발을 도와줘.
+
+## 1. 프로젝트 개요 (Project Overview)
+- **앱 이름:** Snow Paradise
+- **목표:** 스키/스노우보드 유저들을 위한 중고 거래 및 커뮤니티 플랫폼 (당근마켓 스타일)
+- **타겟 유저:** 겨울 스포츠(스키, 보드) 마니아
+
+## 2. 기술 스택 (Tech Stack)
+- **Framework:** Flutter (Dart)
+- **State Management:** Provider (최근 적용함)
+- **UI Style:** Material 3, Clean & Modern (Ice Blue 테마 컬러)
+- **Backend:** 현재는 더미 데이터 사용 중 (추후 Firebase 연동 예정)
+
+## 3. 현재 구현된 기능 (Current Status)
+- **폴더 구조:** `screens`, `models`, `providers`, `data`로 분리된 Clean Architecture 지향.
+- **Main Screen:** 하단 탭 (홈 / 쇼핑 / 등록 / 채팅 / 마이) 네비게이션 구현 완료.
+- **Detail Screen:**
+  - 상품 상세 정보 표시 (이미지, 판매자, 가격 등).
+  - 'Provider'를 이용한 '찜하기(하트)' 기능 구현 완료. (UI 상태 즉시 반영)
+- **Chat Screen:** 채팅 목록 및 채팅방 UI (말풍선 등) 구현 완료.
+- **My Screen:**
+  - 로그인 전/후 화면 분리 (Guest/User View).
+  - 프로필, 설질(매너온도) 게이지 표시.
+- **Login Screen:** 소셜 로그인 UI (카카오/구글/애플) 구현 (기능은 Mock).
+
+## 4. 핵심 요구사항 (Key Requirements)
+- 코드를 작성할 때는 항상 **기존의 폴더 구조(screens, providers 등)**를 유지해줘.
+- 상태 관리가 필요한 기능은 **Provider 패턴**을 사용해서 작성해줘.
+- UI는 현재의 **Ice Blue 테마**와 **세련된 디자인**을 유지해줘.
+
+이 내용을 바탕으로 내가 요청하는 기능들을 구현해줘. 이해했으면 "준비 완료"라고 대답해.

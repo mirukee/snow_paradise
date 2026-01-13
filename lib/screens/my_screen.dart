@@ -1,62 +1,25 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'login_screen.dart'; // 로그인 화면 연결
+import 'package:provider/provider.dart';
+import 'like_list_screen.dart';
+import '../providers/user_service.dart';
 
-class MyScreen extends StatefulWidget {
+class MyScreen extends StatelessWidget {
   const MyScreen({super.key});
 
   @override
-  State<MyScreen> createState() => _MyScreenState();
-}
-
-class _MyScreenState extends State<MyScreen> {
-  // 로그인 상태 변수 (false: 비로그인, true: 로그인됨)
-  bool _isLoggedIn = false;
-
-  // 로그인 화면으로 이동하는 함수
-  Future<void> _navigateToLogin() async {
-    // LoginScreen으로 이동하고, 돌아올 때 결과를 기다림(await)
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
-
-    // 로그인이 성공해서 돌아왔다면(true), 화면을 갱신
-    if (result == true) {
-      setState(() {
-        _isLoggedIn = true;
-      });
-      
-      // 환영 스낵바 띄우기
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('환영합니다! 로그인 되었습니다.')),
-      );
-    }
-  }
-
-  // 로그아웃 함수
-  void _logout() {
-    setState(() {
-      _isLoggedIn = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('로그아웃 되었습니다.')),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    // 로그인 여부에 따라 다른 화면 보여주기
-    if (!_isLoggedIn) {
-      return _buildGuestView();
-    } else {
-      return _buildUserView();
+    final user = context.watch<UserService>().currentUser;
+    if (user == null) {
+      return _buildGuestView(context);
     }
+    return _buildUserView(context, user);
   }
 
   // ==========================================
   // 1. 로그인 안 했을 때 보이는 화면 (Guest View)
   // ==========================================
-  Widget _buildGuestView() {
+  Widget _buildGuestView(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -65,36 +28,91 @@ class _MyScreenState extends State<MyScreen> {
         elevation: 0,
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.account_circle_outlined, size: 80, color: Colors.grey[300]),
-            const SizedBox(height: 20),
-            const Text(
-              '로그인이 필요한 서비스입니다.',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '회원이 되어 다양한 혜택을 누려보세요!',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 30),
-            
-            // 로그인 버튼
-            ElevatedButton(
-              onPressed: _navigateToLogin, // 로그인 화면으로 이동
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).primaryColor,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: _buildSocialButton(
+                  context,
+                  backgroundColor: Colors.white,
+                  borderColor: Colors.grey.shade400,
+                  textColor: Colors.black,
+                  text: 'Google로 계속하기',
+                  logo: Image.network(
+                    // 구글 공식 G 로고 (PNG)
+                    'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/480px-Google_%22G%22_logo.svg.png',
+                    width: 20,
+                    height: 20,
+                  ),
+                  elevation: 0,
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      final user = await context.read<UserService>().loginWithGoogle();
+                      if (user == null) {
+                        return;
+                      }
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('구글 로그인 완료!')),
+                      );
+                    } on FirebaseAuthException catch (error) {
+                      messenger.showSnackBar(
+                        SnackBar(content: Text(error.message ?? '로그인에 실패했습니다.')),
+                      );
+                    } catch (_) {
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('로그인에 실패했습니다.')),
+                      );
+                    }
+                  },
+                ),
               ),
-              child: const Text(
-                '로그인 / 회원가입',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: _buildSocialButton(
+                  context,
+                  backgroundColor: const Color(0xFFFEE500),
+                  borderColor: Colors.transparent,
+                  textColor: Colors.black,
+                  text: 'Kakao로 계속하기',
+                  logo: Image.network(
+                    // 카카오톡 심볼 (PNG)
+                    'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/KakaoTalk_logo.svg/800px-KakaoTalk_logo.svg.png',
+                    width: 20,
+                    height: 20,
+                  ),
+                  elevation: 1,
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('카카오 로그인은 준비 중입니다.')),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: _buildSocialButton(
+                  context,
+                  backgroundColor: Colors.black,
+                  borderColor: Colors.transparent,
+                  textColor: Colors.white,
+                  text: 'Apple로 계속하기',
+                  logo: const Icon(Icons.apple, color: Colors.white, size: 20),
+                  elevation: 1,
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('애플 로그인은 준비 중입니다.')),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -103,8 +121,10 @@ class _MyScreenState extends State<MyScreen> {
   // ==========================================
   // 2. 로그인 했을 때 보이는 화면 (User View - 기존 코드)
   // ==========================================
-  Widget _buildUserView() {
+  Widget _buildUserView(BuildContext context, User user) {
     final primaryColor = Theme.of(context).primaryColor;
+    final displayName = user.displayName ?? user.email ?? '사용자';
+    final photoUrl = user.photoURL;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -115,31 +135,6 @@ class _MyScreenState extends State<MyScreen> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: () {
-              // 설정 아이콘 누르면 임시 로그아웃 기능 연결
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('설정'),
-                  content: const Text('로그아웃 하시겠습니까?'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _logout();
-                      }, 
-                      child: const Text('로그아웃', style: TextStyle(color: Colors.red))
-                    ),
-                  ],
-                ),
-              );
-            },
-            icon: const Icon(Icons.settings_outlined, color: Colors.black),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -158,10 +153,12 @@ class _MyScreenState extends State<MyScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.grey[200],
-                          image: const DecorationImage(
-                            image: NetworkImage('https://picsum.photos/200'),
-                            fit: BoxFit.cover,
-                          ),
+                          image: photoUrl != null
+                              ? DecorationImage(
+                                  image: NetworkImage(photoUrl),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
                         ),
                       ),
                       Positioned(
@@ -183,20 +180,32 @@ class _MyScreenState extends State<MyScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '보드타는약대생',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        Text(
+                          displayName,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '남양주시 다산동 #123456',
+                          user.email ?? 'Google 계정',
                           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                         ),
                       ],
                     ),
                   ),
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await context.read<UserService>().signOut();
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('로그아웃 되었습니다.')),
+                        );
+                      } catch (_) {
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('로그아웃에 실패했습니다.')),
+                        );
+                      }
+                    },
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: Colors.grey[300]!),
                       shape: RoundedRectangleBorder(
@@ -205,7 +214,7 @@ class _MyScreenState extends State<MyScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     child: const Text(
-                      '프로필 보기',
+                      '로그아웃',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
                     ),
                   ),
@@ -271,7 +280,19 @@ class _MyScreenState extends State<MyScreen> {
                 children: [
                   _buildDashboardItem(context, Icons.list_alt, '판매내역'),
                   _buildDashboardItem(context, Icons.shopping_bag_outlined, '구매내역'),
-                  _buildDashboardItem(context, Icons.favorite_border, '관심목록'),
+                  _buildDashboardItem(
+                    context,
+                    Icons.favorite_border,
+                    '관심목록',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LikeListScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -292,22 +313,37 @@ class _MyScreenState extends State<MyScreen> {
     );
   }
 
-  Widget _buildDashboardItem(BuildContext context, IconData icon, String label) {
+  Widget _buildDashboardItem(
+    BuildContext context,
+    IconData icon,
+    String label, {
+    VoidCallback? onTap,
+  }) {
     final primaryColor = Theme.of(context).primaryColor;
-    return Column(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: primaryColor.withOpacity(0.1),
-            shape: BoxShape.circle,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Column(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: primaryColor, size: 24),
+              ),
+              const SizedBox(height: 8),
+              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+            ],
           ),
-          child: Icon(icon, color: primaryColor, size: 24),
         ),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-      ],
+      ),
     );
   }
 
@@ -317,6 +353,51 @@ class _MyScreenState extends State<MyScreen> {
       trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20),
       onTap: () {},
+    );
+  }
+
+  Widget _buildSocialButton(
+    BuildContext context, {
+    required Color backgroundColor,
+    required Color borderColor,
+    required Color textColor,
+    required String text,
+    required Widget logo,
+    required double elevation,
+    required VoidCallback onPressed,
+  }) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: backgroundColor,
+        elevation: elevation,
+        minimumSize: const Size(double.infinity, 50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: borderColor == Colors.transparent
+              ? BorderSide.none
+              : BorderSide(color: borderColor),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(width: 24, height: 24, child: Center(child: logo)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Center(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 36),
+        ],
+      ),
     );
   }
 }

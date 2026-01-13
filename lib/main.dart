@@ -1,14 +1,25 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // [추가]
+import 'firebase_options.dart';
 import 'providers/product_service.dart'; // [추가]
+import 'providers/main_tab_provider.dart';
+import 'providers/user_service.dart';
 import 'screens/main_screen.dart';
-import 'screens/login_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     // [핵심] 앱 전체를 ChangeNotifierProvider로 감싸줍니다.
-    ChangeNotifierProvider(
-      create: (context) => ProductService(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ProductService()),
+        ChangeNotifierProvider(create: (context) => MainTabProvider()),
+        ChangeNotifierProvider(create: (context) => UserService()),
+      ],
       child: const SnowParadiseApp(),
     ),
   );

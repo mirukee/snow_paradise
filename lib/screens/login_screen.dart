@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/user_service.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -77,6 +80,34 @@ class LoginScreen extends StatelessWidget {
                 textColor: Colors.black,
                 icon: Icons.g_mobiledata, // 구글 아이콘 대체
                 hasBorder: true,
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    final user =
+                        await context.read<UserService>().signInAnonymously();
+                    if (user == null) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    _goToMain(context);
+                  } catch (_) {
+                    if (!context.mounted) return;
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('게스트 로그인에 실패했습니다.')),
+                    );
+                  }
+                },
+                child: Text(
+                  '게스트로 체험하기',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
 

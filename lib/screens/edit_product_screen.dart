@@ -18,7 +18,15 @@ class _EditProductScreenState extends State<EditProductScreen> {
   late final TextEditingController _descController;
 
   String _selectedCategory = '기타';
-  final List<String> _categories = ['스키', '스노우보드', '의류', '시즌권', '시즌방', '기타'];
+  final List<String> _categories = [
+    '스노우보드',
+    '스키',
+    '의류',
+    '보호구',
+    '시즌권',
+    '시즌방',
+    '기타',
+  ];
 
   @override
   void initState() {
@@ -103,6 +111,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
       sellerName: widget.product.sellerName,
       sellerProfile: widget.product.sellerProfile,
       sellerId: widget.product.sellerId,
+      status: widget.product.status,
     );
 
     await context.read<ProductService>().updateProduct(updatedProduct);

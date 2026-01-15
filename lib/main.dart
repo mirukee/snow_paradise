@@ -6,6 +6,7 @@ import 'providers/product_service.dart'; // [추가]
 import 'providers/main_tab_provider.dart';
 import 'providers/user_service.dart';
 import 'screens/main_screen.dart';
+import 'package:snow_paradise/services/chat_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (context) => ProductService()),
         ChangeNotifierProvider(create: (context) => MainTabProvider()),
         ChangeNotifierProvider(create: (context) => UserService()),
+        Provider(create: (_) => ChatService()),
       ],
       child: const SnowParadiseApp(),
     ),

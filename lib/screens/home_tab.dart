@@ -22,6 +22,68 @@ class HomeTab extends StatelessWidget {
     return buffer.toString();
   }
 
+  Widget _buildStatusBadge(ProductStatus status) {
+    if (status == ProductStatus.forSale) {
+      return const SizedBox.shrink();
+    }
+    final color = status == ProductStatus.reserved ? Colors.green : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        status.label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEngagementRow(BuildContext context, Product product) {
+    final hasLike = product.likeCount > 0;
+    final hasChat = product.chatCount > 0;
+    if (!hasLike && !hasChat) {
+      return const SizedBox.shrink();
+    }
+    final chatColor = Theme.of(context).colorScheme.primary;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (hasLike) ...[
+          const Icon(Icons.favorite, size: 12, color: Colors.redAccent),
+          const SizedBox(width: 4),
+          Text(
+            '${product.likeCount}',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+        ],
+        if (hasLike && hasChat) const SizedBox(width: 8),
+        if (hasChat) ...[
+          Icon(Icons.chat_bubble_outline, size: 12, color: chatColor),
+          const SizedBox(width: 4),
+          Text(
+            '${product.chatCount}',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final products = context.watch<ProductService>().productList;
@@ -384,6 +446,8 @@ class HomeTab extends StatelessWidget {
   }
 
   Widget _buildPopularProductCard(BuildContext context, Product product) {
+    final isSoldOut = product.status == ProductStatus.soldOut;
+    final hasEngagement = product.likeCount > 0 || product.chatCount > 0;
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -393,100 +457,121 @@ class HomeTab extends StatelessWidget {
           ),
         );
       },
-      child: Container(
-        width: 140,
-        height: 260,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.grey[200]!,
-            width: 1,
+      child: Opacity(
+        opacity: isSoldOut ? 0.5 : 1,
+        child: Container(
+          width: 140,
+          height: 260,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.grey[200]!,
+              width: 1,
+            ),
           ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 상품 이미지 (고정 높이)
-            Container(
-              width: double.infinity,
-              height: 140,
-              color: Colors.grey[200],
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
-                child: buildProductImage(
-                  product,
-                  fit: BoxFit.cover,
-                  errorIconSize: 30,
-                  loadingWidget: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 상품 이미지 (고정 높이)
+              Container(
+                width: double.infinity,
+                height: 140,
+                color: Colors.grey[200],
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: buildProductImage(
+                          product,
+                          fit: BoxFit.cover,
+                          errorIconSize: 30,
+                          loadingWidget: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                      if (product.status != ProductStatus.forSale)
+                        Positioned(
+                          top: 6,
+                          left: 6,
+                          child: _buildStatusBadge(product.status),
+                        ),
+                    ],
                   ),
                 ),
               ),
-            ),
-            // 상품 정보 영역 (나머지 공간)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 브랜드와 상품명
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 브랜드 (maxLines: 1)
-                        if (product.brand.isNotEmpty)
-                          Text(
-                            product.brand,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
+              // 상품 정보 영역 (나머지 공간)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 브랜드와 상품명
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 브랜드 (maxLines: 1)
+                          if (product.brand.isNotEmpty)
+                            Text(
+                              product.brand,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        const SizedBox(height: 4),
-                        // 상품명 (maxLines: 2)
-                        if (product.title.isNotEmpty)
-                          Text(
-                            product.title,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[800],
-                              height: 1.2,
+                          const SizedBox(height: 4),
+                          // 상품명 (maxLines: 2)
+                          if (product.title.isNotEmpty)
+                            Text(
+                              product.title,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[800],
+                                height: 1.2,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // 가격 (maxLines: 1)
-                    Text(
-                      _formatPrice(product.price),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
+                        ],
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      // 가격 (maxLines: 1)
+                      Text(
+                        _formatPrice(product.price),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (hasEngagement) const SizedBox(height: 6),
+                      if (hasEngagement)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _buildEngagementRow(context, product),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

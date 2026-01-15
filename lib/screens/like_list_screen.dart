@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../providers/product_service.dart';
+import '../providers/user_service.dart';
 import 'detail_screen.dart';
 import '../widgets/product_image.dart';
 
@@ -23,8 +24,17 @@ class LikeListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = context.watch<UserService>().currentUser;
+    if (currentUser == null) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: Text('로그인이 필요합니다.')),
+      );
+    }
+
     final productService = context.watch<ProductService>();
-    final likedProducts = productService.likedProducts;
+    final wishlistFuture =
+        productService.getWishlistProducts(currentUser.uid);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -32,20 +42,38 @@ class LikeListScreen extends StatelessWidget {
         title: const Text('관심목록'),
         elevation: 0,
       ),
-      body: likedProducts.isEmpty
-          ? _EmptyState(primaryColor: Theme.of(context).colorScheme.primary)
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: likedProducts.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final product = likedProducts[index];
-                return _LikeListItem(
-                  product: product,
-                  priceText: _formatPrice(product.price),
-                );
-              },
-            ),
+      body: FutureBuilder<List<Product>>(
+        future: wishlistFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return const Center(child: Text('관심 목록을 불러오지 못했어요.'));
+          }
+
+          final likedProducts = snapshot.data ?? [];
+          if (likedProducts.isEmpty) {
+            return _EmptyState(
+              primaryColor: Theme.of(context).colorScheme.primary,
+            );
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: likedProducts.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final product = likedProducts[index];
+              return _LikeListItem(
+                product: product,
+                priceText: _formatPrice(product.price),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -62,103 +90,140 @@ class _LikeListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final isSoldOut = product.status == ProductStatus.soldOut;
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
+    return Opacity(
+      opacity: isSoldOut ? 0.5 : 1,
+      child: Material(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DetailScreen(product: product),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DetailScreen(product: product),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
             ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  width: 76,
-                  height: 76,
-                  color: Colors.grey.shade200,
-                  child: buildProductImage(
-                    product,
-                    fit: BoxFit.cover,
-                    errorIconSize: 28,
-                    loadingWidget: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    width: 76,
+                    height: 76,
+                    color: Colors.grey.shade200,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: buildProductImage(
+                            product,
+                            fit: BoxFit.cover,
+                            errorIconSize: 28,
+                            loadingWidget: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        ),
+                        if (product.status != ProductStatus.forSale)
+                          Positioned(
+                            top: 6,
+                            left: 6,
+                            child: _StatusBadge(status: product.status),
+                          ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            product.brand,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: primaryColor,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              product.title,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () {
+                              final messenger =
+                                  ScaffoldMessenger.of(context);
+                              final currentUser =
+                                  context.read<UserService>().currentUser;
+                              if (currentUser == null) {
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('로그인이 필요합니다.'),
+                                  ),
+                                );
+                                return;
+                              }
+                              context
+                                  .read<ProductService>()
+                                  .toggleLike(product.id, currentUser.uid);
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('관심 목록에서 제거했어요.'),
+                                  duration: Duration(milliseconds: 900),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.favorite, color: Colors.red),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              product.brand,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: primaryColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          _ConditionBadge(condition: product.condition),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        priceText,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
                         ),
-                        _ConditionBadge(condition: product.condition),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      product.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      priceText,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: () {
-                  final messenger = ScaffoldMessenger.of(context);
-                  context.read<ProductService>().toggleLike(product.id);
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('관심 목록에서 제거했어요.'),
-                      duration: Duration(milliseconds: 900),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.favorite, color: Colors.red),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -186,6 +251,36 @@ class _ConditionBadge extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: badgeColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final ProductStatus status;
+
+  const _StatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    if (status == ProductStatus.forSale) {
+      return const SizedBox.shrink();
+    }
+    final badgeColor =
+        status == ProductStatus.reserved ? Colors.green : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        status.label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
         ),
       ),
     );

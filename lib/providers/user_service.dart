@@ -3,42 +3,42 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../services/auth_service.dart';
+import '../services/user_service.dart' as profile_service;
+
 class UserService extends ChangeNotifier {
   final FirebaseAuth _auth;
   final GoogleSignIn _googleSignIn;
+  late final AuthService _authService;
+  late final profile_service.UserService _profileService;
   User? _currentUser;
   Future<void>? _googleSignInInit;
 
-  UserService({FirebaseAuth? auth, GoogleSignIn? googleSignIn})
+  UserService({
+    FirebaseAuth? auth,
+    GoogleSignIn? googleSignIn,
+    AuthService? authService,
+    profile_service.UserService? profileService,
+  })
       : _auth = auth ?? FirebaseAuth.instance,
         _googleSignIn = googleSignIn ?? GoogleSignIn.instance {
+    _authService =
+        authService ?? AuthService(auth: _auth, googleSignIn: _googleSignIn);
+    _profileService =
+        profileService ?? profile_service.UserService(auth: _auth);
     _currentUser = _auth.currentUser;
   }
 
   User? get currentUser => _currentUser;
 
   Future<User?> loginWithGoogle() async {
-    UserCredential credential;
-    if (kIsWeb) {
-      credential = await _auth.signInWithPopup(GoogleAuthProvider());
-    } else {
-      await _ensureGoogleSignInInitialized();
-      try {
-        final googleUser = await _googleSignIn.authenticate();
-        final googleAuth = googleUser.authentication;
-        final authCredential = GoogleAuthProvider.credential(
-          idToken: googleAuth.idToken,
-        );
-        credential = await _auth.signInWithCredential(authCredential);
-      } on GoogleSignInException catch (error) {
-        if (error.code == GoogleSignInExceptionCode.canceled ||
-            error.code == GoogleSignInExceptionCode.interrupted) {
-          return null;
-        }
-        rethrow;
-      }
-    }
+    _currentUser = await _authService.signInWithGoogle();
+    notifyListeners();
+    return _currentUser;
+  }
 
+  Future<User?> signInAnonymously() async {
+    final credential = await _auth.signInAnonymously();
     _currentUser = credential.user;
     notifyListeners();
     return _currentUser;
@@ -56,5 +56,15 @@ class UserService extends ChangeNotifier {
 
   Future<void> _ensureGoogleSignInInitialized() {
     return _googleSignInInit ??= _googleSignIn.initialize();
+  }
+
+  Future<void> deleteAccount() async {
+    final user = _currentUser ?? _auth.currentUser;
+    if (user == null) {
+      throw StateError('로그인이 필요합니다.');
+    }
+    await _profileService.deleteAccount();
+    _currentUser = null;
+    notifyListeners();
   }
 }

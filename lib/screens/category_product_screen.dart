@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../providers/product_service.dart';
+import '../providers/user_service.dart';
 import 'detail_screen.dart';
 import '../widgets/product_image.dart';
 
@@ -21,6 +22,81 @@ class CategoryProductScreen extends StatelessWidget {
     }
     buffer.write('원');
     return buffer.toString();
+  }
+
+  Widget _buildStatusBadge(ProductStatus status) {
+    if (status == ProductStatus.forSale) {
+      return const SizedBox.shrink();
+    }
+    final color = status == ProductStatus.reserved ? Colors.green : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        status.label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEngagementRow(BuildContext context, Product product) {
+    final items = <Widget>[];
+    final chatColor = Theme.of(context).colorScheme.primary;
+
+    if (product.likeCount > 0) {
+      items.add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.favorite, size: 14, color: Colors.redAccent),
+            const SizedBox(width: 4),
+            Text(
+              '${product.likeCount}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (product.chatCount > 0) {
+      if (items.isNotEmpty) {
+        items.add(const SizedBox(width: 8));
+      }
+      items.add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 14, color: chatColor),
+            const SizedBox(width: 4),
+            Text(
+              '${product.chatCount}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: items,
+    );
   }
 
   @override
@@ -69,79 +145,124 @@ class CategoryProductScreen extends StatelessWidget {
     ProductService productService,
   ) {
     final isLiked = productService.isLiked(product.id);
+    final isSoldOut = product.status == ProductStatus.soldOut;
+    final hasEngagement = product.likeCount > 0 || product.chatCount > 0;
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
+    return Opacity(
+      opacity: isSoldOut ? 0.5 : 1,
+      child: Material(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DetailScreen(product: product),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DetailScreen(product: product),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade200),
+              borderRadius: BorderRadius.circular(12),
             ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade200),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  width: 86,
-                  height: 86,
-                  color: Colors.grey.shade200,
-                  child: buildProductImage(
-                    product,
-                    fit: BoxFit.cover,
-                    errorIconSize: 28,
-                    loadingWidget: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    width: 86,
+                    height: 86,
+                    color: Colors.grey.shade200,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: buildProductImage(
+                            product,
+                            fit: BoxFit.cover,
+                            errorIconSize: 28,
+                            loadingWidget: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        ),
+                        if (product.status != ProductStatus.forSale)
+                          Positioned(
+                            top: 6,
+                            left: 6,
+                            child: _buildStatusBadge(product.status),
+                          ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              product.title,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () {
+                              final currentUser =
+                                  context.read<UserService>().currentUser;
+                              if (currentUser == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('로그인이 필요합니다.'),
+                                  ),
+                                );
+                                return;
+                              }
+                              productService.toggleLike(
+                                product.id,
+                                currentUser.uid,
+                              );
+                            },
+                            icon: Icon(
+                              isLiked
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: isLiked ? Colors.red : Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _formatPrice(product.price),
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatPrice(product.price),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
                       ),
-                    ),
-                  ],
+                      if (hasEngagement) const SizedBox(height: 6),
+                      if (hasEngagement)
+                        _buildEngagementRow(context, product),
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: () => productService.toggleLike(product.id),
-                icon: Icon(
-                  isLiked ? Icons.favorite : Icons.favorite_border,
-                  color: isLiked ? Colors.red : Colors.grey,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

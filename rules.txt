@@ -1,5 +1,10 @@
 나는 지금 'Snow Paradise'라는 Flutter 앱을 개발 중이야.
-이 프로젝트의 목표와 현재 진행 상황, 그리고 기술 스택을 알려줄 테니, 앞으로의 개발을 도와줘.
+프로젝트의 목표, 현재 진행 상황, 기술 스택을 반영해 앞으로의 개발을 도와줘.
+
+# Communication Settings
+1. **Language:** You must ALWAYS respond in **Korean (한국어)**.
+2. **Code Comments:** Write all code comments in **Korean** to help understanding.
+3. **Technical Terms:** Use English for standard technical terms (e.g., BuildContext, Stream, Future) but explain them in Korean.
 
 ## 1. 프로젝트 개요 (Project Overview)
 - **앱 이름:** Snow Paradise
@@ -8,25 +13,38 @@
 
 ## 2. 기술 스택 (Tech Stack)
 - **Framework:** Flutter (Dart)
-- **State Management:** Provider (최근 적용함)
+- **State Management:** Provider (ChangeNotifier 기반)
 - **UI Style:** Material 3, Clean & Modern (Ice Blue 테마 컬러)
-- **Backend:** 현재는 더미 데이터 사용 중 (추후 Firebase 연동 예정)
+- **Backend:** Firebase (firebase_core, firebase_auth, cloud_firestore, firebase_storage)
+- **Auth:** Google Sign-In, Guest 로그인
+- **이미지:** image_picker, Firebase Storage 업로드
+- **기타:** intl (시간 포맷), 멀티플랫폼 지원(web/ios/android)
 
 ## 3. 현재 구현된 기능 (Current Status)
-- **폴더 구조:** `screens`, `models`, `providers`, `data`로 분리된 Clean Architecture 지향.
-- **Main Screen:** 하단 탭 (홈 / 쇼핑 / 등록 / 채팅 / 마이) 네비게이션 구현 완료.
-- **Detail Screen:**
-  - 상품 상세 정보 표시 (이미지, 판매자, 가격 등).
-  - 'Provider'를 이용한 '찜하기(하트)' 기능 구현 완료. (UI 상태 즉시 반영)
-- **Chat Screen:** 채팅 목록 및 채팅방 UI (말풍선 등) 구현 완료.
-- **My Screen:**
-  - 로그인 전/후 화면 분리 (Guest/User View).
-  - 프로필, 설질(매너온도) 게이지 표시.
-- **Login Screen:** 소셜 로그인 UI (카카오/구글/애플) 구현 (기능은 Mock).
+- **폴더 구조:** `screens`, `models`, `providers`, `services`, `widgets`, `utils`로 분리.
+- **Main Screen:** 하단 탭 (홈 / 쇼핑 / 등록 / 채팅 / 마이) 네비게이션.
+- **상품:** Firestore 실시간 목록, 카테고리/검색/자동완성, 상세/수정/삭제, 판매 상태 변경.
+- **찜(좋아요):** 사용자별 like 토글, 관심목록 화면.
+- **채팅:** 채팅방 생성/목록/메시지 전송, 미읽음 카운트, 읽음 처리.
+- **프로필:** 닉네임/프로필 이미지 수정, Storage 업로드.
+- **로그인:** Google, 게스트 로그인. 카카오/애플은 UI만 존재.
 
 ## 4. 핵심 요구사항 (Key Requirements)
 - 코드를 작성할 때는 항상 **기존의 폴더 구조(screens, providers 등)**를 유지해줘.
 - 상태 관리가 필요한 기능은 **Provider 패턴**을 사용해서 작성해줘.
 - UI는 현재의 **Ice Blue 테마**와 **세련된 디자인**을 유지해줘.
+- Firebase 연동 로직은 **실서비스 데이터 기준**으로 보수적으로 다뤄줘.
 
-이 내용을 바탕으로 내가 요청하는 기능들을 구현해줘. 이해했으면 "준비 완료"라고 대답해.
+## 5. 미완/리스크 항목 (Gap/Risk)
+- **거래 플로우 부재:** 구매/예약/거래완료, 판매·구매내역, 배송/직거래 흐름 없음.
+- **알림 부재:** FCM 기반 푸시 알림 없음.
+- **안전/정책 부재:** 신고/차단, 약관/개인정보 동의, 계정 탈퇴 플로우 없음.
+- **콘텐츠 품질:** 다중 이미지 업로드/정렬/압축 최적화 미흡.
+- **탐색 성능:** 상품 리스트 페이징/정렬/필터 부족.
+
+## 6. MVP 우선순위 (Next Steps)
+1. **거래 플로우 구축:** 구매/예약/완료 및 내역 화면.
+2. **신뢰·정책 최소 셋:** 신고/차단, 약관/개인정보 동의, 계정탈퇴.
+3. **실사용 품질:** 푸시 알림, 이미지 최적화, 리스트 페이징.
+
+이 내용을 바탕으로 요청된 기능을 구현하고, 변경 사항과 다음 단계(테스트 등)를 간단히 안내해줘.

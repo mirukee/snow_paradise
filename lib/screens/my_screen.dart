@@ -1,8 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'like_list_screen.dart';
+import '../models/user_model.dart';
 import '../providers/user_service.dart';
+import 'profile_screen.dart';
+import 'settings_screen.dart';
 
 class MyScreen extends StatelessWidget {
   const MyScreen({super.key});
@@ -70,6 +74,34 @@ class MyScreen extends StatelessWidget {
                   },
                 ),
               ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    final user =
+                        await context.read<UserService>().signInAnonymously();
+                    if (user == null) {
+                      return;
+                    }
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('게스트 로그인 완료!')),
+                    );
+                  } catch (_) {
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('게스트 로그인에 실패했습니다.')),
+                    );
+                  }
+                },
+                child: Text(
+                  '게스트로 체험하기',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
@@ -123,104 +155,118 @@ class MyScreen extends StatelessWidget {
   // ==========================================
   Widget _buildUserView(BuildContext context, User user) {
     final primaryColor = Theme.of(context).primaryColor;
-    final displayName = user.displayName ?? user.email ?? '사용자';
-    final photoUrl = user.photoURL;
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream:
+          FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data();
+        final userModel = data == null ? null : UserModel.fromJson(data);
+        final displayName = userModel?.nickname.isNotEmpty == true
+            ? userModel!.nickname
+            : (user.displayName ?? user.email ?? '사용자');
+        final email =
+            userModel?.email.isNotEmpty == true ? userModel!.email : user.email;
+        final profileImageUrl = userModel?.profileImageUrl?.trim();
+        final ImageProvider avatarImage =
+            (profileImageUrl != null && profileImageUrl.isNotEmpty)
+                ? NetworkImage(profileImageUrl)
+                : const AssetImage('assets/images/user_default.png');
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text(
-          '나의 파라다이스',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 프로필 영역
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Stack(
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            title: const Text(
+              '나의 파라다이스',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+            ),
+            backgroundColor: Colors.white,
+            elevation: 0,
+          ),
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 프로필 영역
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
                     children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.grey[200],
-                          image: photoUrl != null
-                              ? DecorationImage(
-                                  image: NetworkImage(photoUrl),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
+                      Stack(
+                        children: [
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.grey[200],
+                              image: DecorationImage(
+                                image: avatarImage,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.camera_alt,
+                                  size: 14, color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayName,
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              email?.isNotEmpty == true ? email! : 'Google 계정',
+                              style:
+                                  TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            ),
+                          ],
                         ),
                       ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileScreen(),
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.grey[300]!),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Icon(Icons.camera_alt, size: 14, color: Colors.grey),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                        ),
+                        child: const Text(
+                          '프로필 수정',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          displayName,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user.email ?? 'Google 계정',
-                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  ),
-                  OutlinedButton(
-                    onPressed: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        await context.read<UserService>().signOut();
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('로그아웃 되었습니다.')),
-                        );
-                      } catch (_) {
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('로그아웃에 실패했습니다.')),
-                        );
-                      }
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey[300]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    child: const Text(
-                      '로그아웃',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
 
             // 설질 (Snow Quality)
             Padding(
@@ -301,15 +347,41 @@ class MyScreen extends StatelessWidget {
             const Divider(thickness: 8, color: Color(0xFFF5F5F5)),
 
             // 메뉴 리스트
-            _buildListTile('동네생활 글'),
-            _buildListTile('스키장 친구 찾기'),
-            const Divider(height: 1),
             _buildListTile('자주 묻는 질문'),
             _buildListTile('공지사항'),
             _buildListTile('약관 및 정책'),
-          ],
-        ),
-      ),
+            _buildListTile(
+              '설정',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
+            _buildListTile(
+              '로그아웃',
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await context.read<UserService>().signOut();
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('로그아웃 되었습니다.')),
+                  );
+                } catch (_) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('로그아웃에 실패했습니다.')),
+                  );
+                }
+              },
+            ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -347,12 +419,12 @@ class MyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildListTile(String title) {
+  Widget _buildListTile(String title, {VoidCallback? onTap}) {
     return ListTile(
       title: Text(title, style: const TextStyle(fontSize: 15)),
       trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-      onTap: () {},
+      onTap: onTap ?? () {},
     );
   }
 

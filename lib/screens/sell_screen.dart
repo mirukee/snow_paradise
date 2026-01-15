@@ -24,7 +24,7 @@ class _SellScreenState extends State<SellScreen> {
 
   // 선택된 카테고리를 저장할 변수
   String _selectedCategory = '기타';
-  final List<String> _categories = ['스키', '스노우보드', '의류', '시즌권', '시즌방', '기타'];
+  final List<String> _categories = ['스노우보드', '스키', '의류', '보호구', '기타'];
   
   final ImagePicker _imagePicker = ImagePicker();
   final List<XFile> _selectedImages = [];
@@ -306,59 +306,47 @@ class _SellScreenState extends State<SellScreen> {
               const Divider(height: 1),
               const SizedBox(height: 12),
 
-              // [카테고리 선택 라벨]
               const Text(
                 '카테고리 선택',
                 style: TextStyle(
-                  fontSize: 14, 
-                  fontWeight: FontWeight.bold, 
-                  color: Colors.black87
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
-              const SizedBox(height: 12),
-
-              // [수정된 UI] 가로 스크롤 알약 버튼 (Chips)
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _categories.map((category) {
-                    final isSelected = _selectedCategory == category;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedCategory = category;
-                        });
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          // 선택되면 검은색, 아니면 흰색 배경
-                          color: isSelected ? Colors.black : Colors.white,
-                          borderRadius: BorderRadius.circular(20), // 둥근 알약 모양
-                          border: Border.all(
-                            // 선택 안 됐을 때만 회색 테두리
-                            color: isSelected ? Colors.black : Colors.grey[300]!,
-                          ),
-                        ),
-                        child: Text(
-                          category,
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.grey[600],
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 14,
-                          ),
-                        ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedCategory,
+                items: _categories
+                    .map(
+                      (category) => DropdownMenuItem(
+                        value: category,
+                        child: Text(category),
                       ),
-                    );
-                  }).toList(),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _selectedCategory = value;
+                  });
+                },
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
                 ),
+                dropdownColor: Colors.white,
               ),
-
               const SizedBox(height: 12),
               const Divider(height: 1),
               const SizedBox(height: 12),
-              
+
 
               // 2. 제목 입력
               TextField(

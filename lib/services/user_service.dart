@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/user_model.dart';
 import '../utils/storage_uploader.dart';
@@ -63,6 +64,44 @@ class UserService {
         .set(updateData, SetOptions(merge: true));
 
     return getUser(uid);
+  }
+
+  Future<void> updateFcmToken({
+    required String uid,
+    required String token,
+  }) async {
+    final trimmedUid = uid.trim();
+    final trimmedToken = token.trim();
+    if (trimmedUid.isEmpty || trimmedToken.isEmpty) {
+      return;
+    }
+
+    try {
+      await _firestore.collection('users').doc(trimmedUid).set({
+        'fcmTokens': FieldValue.arrayUnion([trimmedToken]),
+        'lastFcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint('FCM token saved for uid=$trimmedUid');
+    } catch (error) {
+      debugPrint('Failed to save FCM token for uid=$trimmedUid: $error');
+      rethrow;
+    }
+  }
+
+  Future<void> removeFcmToken({
+    required String uid,
+    required String token,
+  }) async {
+    final trimmedUid = uid.trim();
+    final trimmedToken = token.trim();
+    if (trimmedUid.isEmpty || trimmedToken.isEmpty) {
+      return;
+    }
+
+    await _firestore.collection('users').doc(trimmedUid).set({
+      'fcmTokens': FieldValue.arrayRemove([trimmedToken]),
+      'lastFcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> blockUser({

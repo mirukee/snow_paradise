@@ -1,18 +1,22 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // [추가]
 import 'firebase_options.dart';
 import 'providers/product_service.dart'; // [추가]
 import 'providers/main_tab_provider.dart';
+import 'providers/notification_provider.dart';
 import 'providers/user_service.dart';
 import 'screens/main_screen.dart';
 import 'package:snow_paradise/services/chat_service.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(
     // [핵심] 앱 전체를 ChangeNotifierProvider로 감싸줍니다.
     MultiProvider(
@@ -20,6 +24,10 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (context) => ProductService()),
         ChangeNotifierProvider(create: (context) => MainTabProvider()),
         ChangeNotifierProvider(create: (context) => UserService()),
+        ChangeNotifierProvider(
+          lazy: false,
+          create: (context) => NotificationProvider()..initialize(),
+        ),
         Provider(create: (_) => ChatService()),
       ],
       child: const SnowParadiseApp(),

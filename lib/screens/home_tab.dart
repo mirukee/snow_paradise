@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/product.dart';
 import '../providers/product_service.dart';
+import '../providers/user_service.dart';
+import '../widgets/product_card.dart';
 import 'detail_screen.dart';
 import 'search_screen.dart';
-import '../widgets/product_image.dart';
+
+const _secondaryColor = Color(0xFF101922);
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -22,551 +26,445 @@ class HomeTab extends StatelessWidget {
     return buffer.toString();
   }
 
-  Widget _buildStatusBadge(ProductStatus status) {
-    if (status == ProductStatus.forSale) {
-      return const SizedBox.shrink();
+  String _formatTimeAgo(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+
+    if (difference.inMinutes < 1) {
+      return '방금 전';
     }
-    final color = status == ProductStatus.reserved ? Colors.green : Colors.grey;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        status.label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-      ),
-    );
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}분 전';
+    }
+    if (difference.inHours < 24) {
+      return '${difference.inHours}시간 전';
+    }
+    if (difference.inDays < 7) {
+      return '${difference.inDays}일 전';
+    }
+    final month = time.month.toString().padLeft(2, '0');
+    final day = time.day.toString().padLeft(2, '0');
+    return '${time.year}.$month.$day';
   }
 
-  Widget _buildEngagementRow(BuildContext context, Product product) {
-    final hasLike = product.likeCount > 0;
-    final hasChat = product.chatCount > 0;
-    if (!hasLike && !hasChat) {
-      return const SizedBox.shrink();
+  String _buildSubtitle(Product product) {
+    final category = product.category.trim();
+    final timeAgo = _formatTimeAgo(product.createdAt);
+    if (category.isEmpty) {
+      return timeAgo;
     }
-    final chatColor = Theme.of(context).colorScheme.primary;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        if (hasLike) ...[
-          const Icon(Icons.favorite, size: 12, color: Colors.redAccent),
-          const SizedBox(width: 4),
-          Text(
-            '${product.likeCount}',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-        ],
-        if (hasLike && hasChat) const SizedBox(width: 8),
-        if (hasChat) ...[
-          Icon(Icons.chat_bubble_outline, size: 12, color: chatColor),
-          const SizedBox(width: 4),
-          Text(
-            '${product.chatCount}',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-        ],
-      ],
-    );
+    return '$category • $timeAgo';
   }
 
   @override
   Widget build(BuildContext context) {
-    final products = context.watch<ProductService>().productList;
+    final productService = context.watch<ProductService>();
+    final products = productService.productList;
+    final currentUser = context.watch<UserService>().currentUser;
+    final topPadding = MediaQuery.of(context).padding.top;
+    const headerContentHeight = 124.0;
+    final headerHeight = topPadding + headerContentHeight;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final categoryCardWidth = (screenWidth - 32 - 12) / 2;
+    const categoryCardHeight = 140.0;
+
+    final categories = [
+      const _CategoryItem(
+        title: '스키',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuDGXCBIT71l6t3sL4c2gn6uXyzELL1nGh38plSoolG4CtCw7932mRj10nYBCJdlmiL5SU9xYYXjEtqU5EcVceCUH_KpyYfJIvC1Jw5awFwiNNeckN_qTb1EojGV_udjPsi5cGQKJ4lJNMSmiX1JNsFFfbO-32-RnI4yTSqXp_7Qw9xPu7_r9vlyGc5LhIa6khZJyrHDP8yy4gVAUade_vZyhnliLHQkOnSnNJTnHX2GbTFHySS75mCu-B5i2DbYqez0rpxM7t96DS3m',
+      ),
+      const _CategoryItem(
+        title: '스노우보드',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuBjrqa2RXzuWYtD-qjEijlOUeOYQG3kYLNohPRKrv0injxhJ1D6XSmE8GkvYDeAgWIMoJ-qVEJpIHoeqrvxyazId-Jke-8W6K3kGXc0MDsLZaO6WjRiL9N8h1v5rFVipKlazlQnhgjy1OivFfjJKZ3CGN5HgkaIv3idUZiQmYc-CrVqMzNqiTp3Q748nprAsK9XqnOyZa_R1tZYMsbReDRxgB1X3mo1nac6zGeLynVS1eQ2srEL8CsHJ4N2H3kZcU9uzlEtY75rlz8a',
+      ),
+      const _CategoryItem(
+        title: '의류',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuCbgANMCfc7wR_NYEa9w6tZt_Z-avm23VyGZXe1h5upJ-94DiBbc8e_hVAYkMTDvZycda8wJtLGRpk9TaBrQEi3ZvYtqf15izgBmIKcvBg9rqNC2arzKi0IFX50sq-szHK6RQBNVlkfgElsrKKD6eAqjxt0RtfBXfTN5W0VZYxR5JoiEdVnJJD0r4MRA642s3pzsO35odWiak0FEZlwrWv_GL8MJhOdU9F4Mc_o0RcDvFkDoB171FYJ4BZD5dCOtqSYzB4ehvDZJrWC',
+      ),
+      const _CategoryItem(
+        title: '장비/기타',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuCbggLa1k9qusrt2hjLyyvTyGH6eA3ZawF7HVXPlssp-3w8yS4H1RCKKDypAUdwErDYliYPmyYSpZM3hj7Oonaipq3okW4HENocEm5drbw2_WlkFTFh_kEMJEV2dKOZqlwr5e1dqFBBQiZ_0Zs_DJTvWMtG9Sp79iUq3T5yfZpeweOuS-1WdjXdCwti1KpuMvOIwIuZDiM4LB1zB96TvjfKM5ButAjpFcWI9HLhpPZw33tPJvKTWXVlb2bQK146FDlJZg_KZJ_MEdIn',
+      ),
+    ];
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 상단 여백 (상태바 대체)
-            const SizedBox(height: 16),
-            
-            // 1. 상단 브랜딩 및 검색바 (수정됨)
-            Container(
-              height: 60,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // [수정 포인트] 로고 이미지 영역
-                  // Transform.scale을 사용하여 강제로 1.5배 확대 (여백 잘라내기 효과)
-                  Container(
-                    width: 140, // 너비를 살짝 줄여서 검색창 공간 확보
-                    height: 45,
-                    clipBehavior: Clip.hardEdge, // 확대된 이미지가 네모칸 밖으로 나가지 않게 자름
-                    decoration: BoxDecoration(
-                      // 영역 확인용 (나중에 투명으로 바꾸거나 삭제 가능)
-                      color: Colors.transparent, 
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Transform.scale(
-                      scale: 1.1, // 1.5배 확대! (글씨가 커집니다)
-                      alignment: Alignment.centerLeft, // 왼쪽 기준으로 확대
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        fit: BoxFit.contain, // 비율 유지하며 안에 맞춤
-                        filterQuality: FilterQuality.high, // 고화질 렌더링
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Center(
-                            child: Text(
-                              'Snow Paradise',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+      body: CustomScrollView(
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _HomeHeaderDelegate(
+              height: headerHeight,
+              topPadding: topPadding,
+              onSearchTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SearchScreen(),
                   ),
-                  
-                  const SizedBox(width: 12), // 간격 조정
-                  
-                  // 검색바 (남은 공간 전체 사용)
-                  Expanded(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () {
-                          // 홈 검색바 탭 시 검색 화면으로 이동
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SearchScreen(),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          height: 45,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.search,
-                                color: Colors.grey[600],
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '브랜드, 모델명, 사이즈 등 검색',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey[600],
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
+              onNotificationTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('알림 기능은 준비 중입니다.')),
+                );
+              },
             ),
-            
-            const SizedBox(height: 24),
-            // 2. 메인 카테고리 (SKI & SNOWBOARD)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  // SKI 카드
-                  Expanded(
-                    child: _buildMainCategoryCard(
-                      context,
-                      title: 'SKI',
-                      imageUrl: 'https://picsum.photos/400/400?random=ski',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // SNOWBOARD 카드
-                  Expanded(
-                    child: _buildMainCategoryCard(
-                      context,
-                      title: 'SNOWBOARD',
-                      imageUrl: 'https://picsum.photos/400/400?random=snowboard',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            // 3. 서브 카테고리 (의류, 시즌권, 시즌방, 강습)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildSubCategoryItem(
-                    context,
-                    icon: Icons.checkroom,
-                    label: '의류',
-                  ),
-                  _buildSubCategoryItem(
-                    context,
-                    icon: Icons.confirmation_number,
-                    label: '시즌권',
-                  ),
-                  _buildSubCategoryItem(
-                    context,
-                    icon: Icons.home,
-                    label: '시즌방',
-                  ),
-                  _buildSubCategoryItem(
-                    context,
-                    icon: Icons.school,
-                    label: '강습',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            // 구분선
-            Divider(
-              height: 1,
-              thickness: 1,
-              color: Colors.grey[200],
-            ),
-            const SizedBox(height: 24),
-            // 4. 가로 스크롤 추천 리스트
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 제목
-                  const Text(
-                    '🔥 지금 뜨는 매물',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 가로 스크롤 상품 리스트
-                  SizedBox(
-                    height: 260,
-                    child: products.isEmpty
-                        ? const Center(
-                            child: Text(
-                              '상품이 없습니다',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 14,
-                              ),
-                            ),
-                          )
-                        : ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: products.length,
-                            itemBuilder: (context, index) {
-                              if (index >= products.length) {
-                                return const SizedBox.shrink();
-                              }
-                              final product = products[index];
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  right: index < products.length - 1 ? 12 : 0,
-                                ),
-                                child: _buildPopularProductCard(context, product),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMainCategoryCard(
-    BuildContext context, {
-    required String title,
-    required String imageUrl,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        // 카테고리 클릭 액션 (추후 구현)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$title 카테고리 (준비 중)')),
-        );
-      },
-      child: Container(
-        height: 200,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            // 배경 이미지
-            SizedBox(
-              width: double.infinity,
-              height: double.infinity,
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey[300],
-                    child: const Icon(
-                      Icons.image_not_supported,
-                      color: Colors.grey,
-                      size: 50,
-                    ),
-                  );
-                },
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: Colors.grey[200],
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                },
-              ),
-            ),
-            // 그라데이션 오버레이
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 100,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.7),
-                      Colors.black.withOpacity(0.3),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // 텍스트 (좌측 하단)
-            Positioned(
-              bottom: 16,
-              left: 16,
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 1.5,
+                '카테고리',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _secondaryColor,
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubCategoryItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$label (준비 중)')),
-        );
-      },
-      child: Column(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              color: Colors.grey[700],
-              size: 28,
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: categoryCardHeight,
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                scrollDirection: Axis.horizontal,
+                itemCount: categories.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final item = categories[index];
+                  return SizedBox(
+                    width: categoryCardWidth,
+                    height: categoryCardHeight,
+                    child: _CategoryCard(
+                      item: item,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${item.title} 카테고리 (준비 중)'),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Colors.black,
-              fontWeight: FontWeight.w500,
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  const Text(
+                    '방금 올라온 상품',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _secondaryColor,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('더보기는 준비 중입니다.')),
+                      );
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey[500],
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      '더보기',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+          if (products.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                child: Center(
+                  child: Text(
+                    '상품이 없습니다',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              sliver: SliverGrid(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final product = products[index];
+                    final isLiked = productService.isLiked(product.id);
+                    return ProductCard(
+                      product: product,
+                      priceText: _formatPrice(product.price),
+                      subtitle: _buildSubtitle(product),
+                      isLiked: isLiked,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                DetailScreen(product: product),
+                          ),
+                        );
+                      },
+                      onLikeTap: () {
+                        if (currentUser == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('로그인이 필요합니다.')),
+                          );
+                          return;
+                        }
+                        productService.toggleLike(product.id, currentUser.uid);
+                      },
+                    );
+                  },
+                  childCount: products.length,
+                ),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.72,
+                ),
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPopularProductCard(BuildContext context, Product product) {
-    final isSoldOut = product.status == ProductStatus.soldOut;
-    final hasEngagement = product.likeCount > 0 || product.chatCount > 0;
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DetailScreen(product: product),
-          ),
-        );
-      },
-      child: Opacity(
-        opacity: isSoldOut ? 0.5 : 1,
-        child: Container(
-          width: 140,
-          height: 260,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.grey[200]!,
-              width: 1,
+class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _HomeHeaderDelegate({
+    required this.height,
+    required this.topPadding,
+    required this.onSearchTap,
+    required this.onNotificationTap,
+  });
+
+  final double height;
+  final double topPadding;
+  final VoidCallback onSearchTap;
+  final VoidCallback onNotificationTap;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        boxShadow: [
+          if (overlapsContent)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 상품 이미지 (고정 높이)
-              Container(
-                width: double.infinity,
-                height: 140,
-                color: Colors.grey[200],
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    topRight: Radius.circular(8),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: buildProductImage(
-                          product,
-                          fit: BoxFit.cover,
-                          errorIconSize: 30,
-                          loadingWidget: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(8, topPadding + 8, 12, 12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: (MediaQuery.of(context).size.width - 24) * 0.42,
+                      height: 36,
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        alignment: Alignment.centerLeft,
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Text(
+                              '스노우 파라다이스',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: _secondaryColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            );
+                          },
                         ),
                       ),
-                      if (product.status != ProductStatus.forSale)
-                        Positioned(
-                          top: 6,
-                          left: 6,
-                          child: _buildStatusBadge(product.status),
+                    ),
+                  ),
+                ),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: onNotificationTap,
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.notifications,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onSearchTap,
+                child: Ink(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      Icon(Icons.search, color: Colors.grey[500], size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '브랜드, 장비, 매물 검색...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[500],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      const SizedBox(width: 12),
                     ],
                   ),
                 ),
               ),
-              // 상품 정보 영역 (나머지 공간)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 브랜드와 상품명
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 브랜드 (maxLines: 1)
-                          if (product.brand.isNotEmpty)
-                            Text(
-                              product.brand,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          const SizedBox(height: 4),
-                          // 상품명 (maxLines: 2)
-                          if (product.title.isNotEmpty)
-                            Text(
-                              product.title,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[800],
-                                height: 1.2,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // 가격 (maxLines: 1)
-                      Text(
-                        _formatPrice(product.price),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (hasEngagement) const SizedBox(height: 6),
-                      if (hasEngagement)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildEngagementRow(context, product),
-                        ),
-                    ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _HomeHeaderDelegate oldDelegate) {
+    return oldDelegate.height != height ||
+        oldDelegate.topPadding != topPadding;
+  }
+}
+
+class _CategoryItem {
+  const _CategoryItem({
+    required this.title,
+    required this.imageUrl,
+  });
+
+  final String title;
+  final String imageUrl;
+}
+
+class _CategoryCard extends StatelessWidget {
+  const _CategoryCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  final _CategoryItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(32),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(32),
+            image: DecorationImage(
+              image: NetworkImage(item.imageUrl),
+              fit: BoxFit.cover,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(32),
+                    color: Colors.black.withOpacity(0.3),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: Text(
+                  item.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
               ),

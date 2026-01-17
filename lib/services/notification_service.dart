@@ -66,9 +66,9 @@ class NotificationService {
       return;
     }
     await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
+      alert: false,
+      badge: false,
+      sound: false,
     );
   }
 

@@ -92,7 +92,6 @@ class NotificationProvider extends ChangeNotifier {
     _lastMessage = message;
     notifyListeners();
     _notificationService.showForegroundSnackBar(message);
-    await _notificationService.showForegroundNotification(message);
   }
 
   void _handleMessageOpened(RemoteMessage message) {
@@ -106,6 +105,7 @@ class NotificationProvider extends ChangeNotifier {
       debugPrint('FCM token is null/empty; skip Firestore sync.');
       return;
     }
+    debugPrint('현재 FCM token: $token');
     _fcmToken = token;
     notifyListeners();
 

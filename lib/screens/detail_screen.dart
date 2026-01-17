@@ -8,6 +8,7 @@ import '../services/user_service.dart' as safety_service;
 import '../services/chat_service.dart';
 import 'edit_product_screen.dart';
 import 'chat_screen.dart';
+import 'seller_profile_screen.dart';
 import '../widgets/product_image.dart';
 
 enum _DetailMenuAction { report, block }
@@ -285,211 +286,330 @@ class _DetailScreenState extends State<DetailScreen> {
             : currentProduct.sellerName == currentUserName &&
                 currentProduct.sellerProfile == currentUserPhoto);
 
+    const iceBlue = Color(0xFF00AEEF);
+    const textDark = Color(0xFF111518);
+    const softBorder = Color(0xFFE3EEF8);
+    const softSurface = Color(0xFFF5F8FC);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('상품 상세'),
-        elevation: 0,
-        actions: isOwner
-            ? []
-            : [
-                PopupMenuButton<_DetailMenuAction>(
-                  onSelected: (action) {
-                    if (currentUserId == null || currentUserId.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('로그인이 필요합니다.')),
-                      );
-                      return;
-                    }
-                    if (action == _DetailMenuAction.report) {
-                      _handleReport(
-                        context,
-                        product: currentProduct,
-                        reporterUid: currentUserId,
-                      );
-                    } else if (action == _DetailMenuAction.block) {
-                      _handleBlock(
-                        context,
-                        product: currentProduct,
-                        currentUserId: currentUserId,
-                      );
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: _DetailMenuAction.report,
-                      child: Text('이 게시글 신고하기'),
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 4 / 5,
+                      child: buildProductImage(
+                        currentProduct,
+                        fit: BoxFit.cover,
+                        errorIconSize: 80,
+                        loadingWidget: const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
                     ),
-                    PopupMenuItem(
-                      value: _DetailMenuAction.block,
-                      child: Text('이 사용자 차단하기'),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.55),
+                              Colors.transparent,
+                              Colors.transparent,
+                              Colors.white,
+                            ],
+                            stops: const [0, 0.25, 0.7, 1],
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (currentProduct.brand.isNotEmpty)
+                        Text(
+                          currentProduct.brand,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: iceBlue,
+                          ),
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        currentProduct.title,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          height: 1.3,
+                          color: textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _formatPrice(currentProduct.price),
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: iceBlue,
+                        ),
+                      ),
+                      if (hasEngagement) const SizedBox(height: 12),
+                      if (hasEngagement)
+                        _buildEngagementRow(context, currentProduct),
+                      const SizedBox(height: 20),
+                      Ink(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: softBorder),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () {
+                            if (currentProduct.sellerId.isEmpty &&
+                                currentProduct.sellerName.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('판매자 정보를 찾을 수 없어요.'),
+                                ),
+                              );
+                              return;
+                            }
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => SellerProfileScreen(
+                                  sellerId: currentProduct.sellerId,
+                                  sellerName: currentProduct.sellerName,
+                                  sellerProfileImage:
+                                      currentProduct.sellerProfile,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: Colors.grey.shade200,
+                                  backgroundImage:
+                                      currentProduct.sellerProfile.isNotEmpty
+                                          ? NetworkImage(
+                                              currentProduct.sellerProfile,
+                                            )
+                                          : null,
+                                  child: currentProduct.sellerProfile.isEmpty
+                                      ? const Icon(Icons.person,
+                                          color: Colors.grey)
+                                      : null,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        currentProduct.sellerName,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: textDark,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '판매자',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                _buildStatusChip(context, displayStatus),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        '제품 상세',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (currentProduct.size.isNotEmpty)
+                            _buildDetailChip('길이: ${currentProduct.size}'),
+                          if (currentProduct.condition.isNotEmpty)
+                            _buildDetailChip('상태: ${currentProduct.condition}'),
+                          if (currentProduct.year.isNotEmpty)
+                            _buildDetailChip('연식: ${currentProduct.year}'),
+                          if (currentProduct.brand.isNotEmpty)
+                            _buildDetailChip('브랜드: ${currentProduct.brand}'),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        '제품 설명',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        currentProduct.description,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          height: 1.6,
+                          color: Color(0xFF3F5263),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        '거래 희망 장소',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: softSurface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: softBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFEBEE),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(
+                                Icons.location_on,
+                                size: 16,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              '서울 강남구',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: textDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 120),
+                    ],
+                  ),
+                ),
               ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 상품 이미지 (크게)
-            Container(
-              width: double.infinity,
-              height: 400,
-              color: Colors.grey.shade200,
-              child: buildProductImage(
-                currentProduct,
-                fit: BoxFit.cover,
-                errorIconSize: 80,
-                loadingWidget: const Center(
-                  child: CircularProgressIndicator(),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Row(
+                  children: [
+                    _buildGlassIconButton(
+                      icon: Icons.arrow_back,
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const Spacer(),
+                    if (!isOwner)
+                      PopupMenuButton<_DetailMenuAction>(
+                        onSelected: (action) {
+                          if (currentUserId == null || currentUserId.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('로그인이 필요합니다.')),
+                            );
+                            return;
+                          }
+                          if (action == _DetailMenuAction.report) {
+                            _handleReport(
+                              context,
+                              product: currentProduct,
+                              reporterUid: currentUserId,
+                            );
+                          } else if (action == _DetailMenuAction.block) {
+                            _handleBlock(
+                              context,
+                              product: currentProduct,
+                              currentUserId: currentUserId,
+                            );
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: _DetailMenuAction.report,
+                            child: Text('이 게시글 신고하기'),
+                          ),
+                          PopupMenuItem(
+                            value: _DetailMenuAction.block,
+                            child: Text('이 사용자 차단하기'),
+                          ),
+                        ],
+                        child: _buildGlassIcon(icon: Icons.more_vert),
+                      ),
+                  ],
                 ),
               ),
             ),
-            // 상품 정보 섹션
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 판매자 프로필
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 25,
-                        backgroundColor: Colors.grey.shade300,
-                        backgroundImage: currentProduct.sellerProfile.isNotEmpty
-                            ? NetworkImage(currentProduct.sellerProfile)
-                            : null,
-                        child: currentProduct.sellerProfile.isEmpty
-                            ? const Icon(Icons.person, color: Colors.grey)
-                            : null,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              currentProduct.sellerName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '판매자',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  // 제목과 가격
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              currentProduct.brand,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              currentProduct.title,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                height: 1.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // 가격
-                  Text(
-                    _formatPrice(currentProduct.price),
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  if (hasEngagement) const SizedBox(height: 12),
-                  if (hasEngagement)
-                    _buildEngagementRow(context, currentProduct),
-                  const SizedBox(height: 24),
-                  // 구분선
-                  Divider(color: Colors.grey.shade300, thickness: 1),
-                  const SizedBox(height: 24),
-                  // 스펙 정보
-                  const Text(
-                    '상품 정보',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 상태
-                  _buildInfoRow(
-                    context,
-                    '상태',
-                    currentProduct.condition,
-                    currentProduct.condition == '거의 새것' ? Colors.green : Colors.orange,
-                  ),
-                  const SizedBox(height: 12),
-                  // 사이즈
-                  _buildInfoRow(context, '사이즈', currentProduct.size, null),
-                  const SizedBox(height: 12),
-                  // 연식
-                  _buildInfoRow(context, '연식', currentProduct.year, null),
-                  const SizedBox(height: 12),
-                  // 브랜드
-                  _buildInfoRow(context, '브랜드', currentProduct.brand, null),
-                  const SizedBox(height: 24),
-                  // 구분선
-                  Divider(color: Colors.grey.shade300, thickness: 1),
-                  const SizedBox(height: 24),
-                  // 상세 설명
-                  const Text(
-                    '상세 설명',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    currentProduct.description,
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.6,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                  const SizedBox(height: 100), // 하단 버튼 공간
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
       // 하단 고정 버튼
       bottomNavigationBar: SafeArea(
@@ -497,11 +617,12 @@ class _DetailScreenState extends State<DetailScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
+            border: Border(top: BorderSide(color: Colors.grey.shade200)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, -2),
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 10,
+                offset: const Offset(0, -4),
               ),
             ],
           ),
@@ -690,8 +811,8 @@ class _DetailScreenState extends State<DetailScreen> {
         Container(
           margin: const EdgeInsets.only(right: 12),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: IconButton(
             onPressed: () {
@@ -717,7 +838,7 @@ class _DetailScreenState extends State<DetailScreen> {
           ),
         ),
         Expanded(
-          child: OutlinedButton(
+          child: ElevatedButton(
             onPressed: isSoldOut
                 ? null
                 : () async {
@@ -771,22 +892,17 @@ class _DetailScreenState extends State<DetailScreen> {
                   messenger.showSnackBar(
                     const SnackBar(content: Text('채팅방 생성에 실패했어요.')),
                   );
+                  }
                 }
-              }
             },
-            style: OutlinedButton.styleFrom(
+            style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              side: BorderSide(
-                color: isSoldOut
-                    ? Colors.grey.shade300
-                    : Theme.of(context).colorScheme.primary,
-                width: 1.5,
-              ),
-              foregroundColor: isSoldOut
-                  ? Colors.grey.shade500
-                  : Theme.of(context).colorScheme.primary,
+              backgroundColor:
+                  isSoldOut ? Colors.grey.shade200 : const Color(0xFF00AEEF),
+              foregroundColor:
+                  isSoldOut ? Colors.grey.shade600 : const Color(0xFF101922),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
             child: Text(
@@ -798,67 +914,52 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('구매하기 기능은 준비 중입니다.')),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              elevation: 0,
-            ),
-            child: const Text(
-              '구매하기',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
 
-  Widget _buildInfoRow(
-    BuildContext context,
-    String label,
-    String value,
-    Color? valueColor,
-  ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-            ),
-          ),
+  Widget _buildDetailChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F8FC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE3EEF8)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF3F5263),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: valueColor ?? Colors.black87,
-            ),
-          ),
-        ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildGlassIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(20),
+      child: _buildGlassIcon(icon: icon),
+    );
+  }
+
+  Widget _buildGlassIcon({required IconData icon}) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.25),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Icon(
+        icon,
+        color: Colors.white,
+      ),
     );
   }
 }

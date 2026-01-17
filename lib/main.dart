@@ -17,6 +17,7 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  final navigatorKey = GlobalKey<NavigatorState>();
   runApp(
     // [핵심] 앱 전체를 ChangeNotifierProvider로 감싸줍니다.
     MultiProvider(
@@ -26,23 +27,30 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (context) => UserService()),
         ChangeNotifierProvider(
           lazy: false,
-          create: (context) => NotificationProvider()..initialize(),
+          create: (context) =>
+              NotificationProvider(navigatorKey: navigatorKey)..initialize(),
         ),
         Provider(create: (_) => ChatService()),
       ],
-      child: const SnowParadiseApp(),
+      child: SnowParadiseApp(navigatorKey: navigatorKey),
     ),
   );
 }
 
 class SnowParadiseApp extends StatelessWidget {
-  const SnowParadiseApp({super.key});
+  const SnowParadiseApp({
+    super.key,
+    required this.navigatorKey,
+  });
+
+  final GlobalKey<NavigatorState> navigatorKey;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '스노우 파라다이스',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,

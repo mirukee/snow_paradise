@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../services/notification_service.dart';
 import '../services/user_service.dart' as profile_service;
@@ -12,9 +13,14 @@ class NotificationProvider extends ChangeNotifier {
     NotificationService? notificationService,
     FirebaseAuth? auth,
     profile_service.UserService? userService,
-  })  : _notificationService = notificationService ?? NotificationService(),
+    GlobalKey<NavigatorState>? navigatorKey,
+  })  : _notificationService = notificationService ??
+            NotificationService(navigatorKey: navigatorKey),
         _auth = auth ?? FirebaseAuth.instance,
         _userService = userService ?? profile_service.UserService() {
+    if (navigatorKey != null) {
+      _notificationService.updateNavigatorKey(navigatorKey);
+    }
     _lastUserId = _auth.currentUser?.uid;
     _authSubscription = _auth.authStateChanges().listen(_handleAuthChanged);
   }
@@ -72,6 +78,7 @@ class NotificationProvider extends ChangeNotifier {
     final initialMessage = await _notificationService.getInitialMessage();
     if (initialMessage != null) {
       _lastMessage = initialMessage;
+      _notificationService.handleMessageNavigation(initialMessage);
     }
 
     _tokenRefreshSubscription =
@@ -84,12 +91,14 @@ class NotificationProvider extends ChangeNotifier {
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     _lastMessage = message;
     notifyListeners();
+    _notificationService.showForegroundSnackBar(message);
     await _notificationService.showForegroundNotification(message);
   }
 
   void _handleMessageOpened(RemoteMessage message) {
     _lastMessage = message;
     notifyListeners();
+    _notificationService.handleMessageNavigation(message);
   }
 
   Future<void> _syncToken(String? token) async {

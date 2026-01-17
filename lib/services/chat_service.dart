@@ -192,6 +192,42 @@ class ChatService {
     });
   }
 
+  Future<ChatRoom?> getChatRoomById(String roomId) async {
+    final trimmedRoomId = roomId.trim();
+    if (trimmedRoomId.isEmpty) {
+      return null;
+    }
+
+    final snapshot =
+        await _firestore.collection('chat_rooms').doc(trimmedRoomId).get();
+    final data = snapshot.data();
+    if (!snapshot.exists || data == null) {
+      return null;
+    }
+
+    final userId = _auth.currentUser?.uid;
+    if (userId == null || userId.isEmpty) {
+      return null;
+    }
+    final participantsRaw = data['participants'];
+    final participants = participantsRaw is Iterable
+        ? participantsRaw.map((e) => e.toString()).toSet()
+        : <String>{};
+    final sellerId = data['sellerId']?.toString() ?? '';
+    final buyerId = data['buyerId']?.toString() ?? '';
+    final isParticipant = participants.contains(userId) ||
+        sellerId == userId ||
+        buyerId == userId;
+    if (!isParticipant) {
+      return null;
+    }
+
+    return ChatRoom.fromJson({
+      ...data,
+      'roomId': snapshot.id,
+    });
+  }
+
   Future<void> sendMessage(String roomId, String text) async {
     final userId = _requireUser().uid;
     final trimmedText = text.trim();

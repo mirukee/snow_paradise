@@ -182,3 +182,156 @@ exports.sendChatNotification = functions.firestore
 
     return null;
   });
+
+/**
+ * 찜 알림 전송 Cloud Function
+ * users/{userId}/likes/{productId} 문서 생성 시 트리거
+ */
+exports.sendLikeNotification = functions.firestore
+  .document("users/{userId}/likes/{productId}")
+  .onCreate(async (snapshot, context) => {
+    const likerId = context.params.userId; // 찜을 누른 사용자
+    const productId = context.params.productId; // 찜한 상품 ID
+
+    if (!likerId || !productId) {
+      functions.logger.warn("Missing likerId or productId.", {
+        likerId,
+        productId,
+      });
+      return null;
+    }
+
+    // 상품 정보 조회
+    const productSnapshot = await db
+      .collection("products")
+      .where("id", "==", productId)
+      .limit(1)
+      .get();
+
+    if (productSnapshot.empty) {
+      functions.logger.warn("Product not found.", { productId });
+      return null;
+    }
+
+    const productData = productSnapshot.docs[0].data();
+    const sellerId = toCleanString(productData.sellerId);
+    const productTitle = toCleanString(productData.title) || "상품";
+
+    // 본인 상품 찜 시 알림 제외
+    if (sellerId === likerId) {
+      functions.logger.info("User liked own product. Skip notification.", {
+        likerId,
+        productId,
+      });
+      return null;
+    }
+
+    if (!sellerId) {
+      functions.logger.warn("Seller not found for product.", { productId });
+      return null;
+    }
+
+    // 차단된 사용자에게는 푸시를 보내지 않습니다.
+    const blockedSnapshot = await db
+      .collection("users")
+      .doc(sellerId)
+      .collection("blocked_users")
+      .doc(likerId)
+      .get();
+
+    if (blockedSnapshot.exists) {
+      functions.logger.info("Seller blocked liker. Skip notification.", {
+        sellerId,
+        likerId,
+      });
+      return null;
+    }
+
+    // 판매자 FCM 토큰 조회
+    const sellerSnapshot = await db.collection("users").doc(sellerId).get();
+    const sellerData = sellerSnapshot.data() || {};
+    const tokens = toTrimmedTokens(sellerData.fcmTokens);
+
+    if (tokens.length === 0) {
+      functions.logger.warn("No FCM tokens for seller.", {
+        sellerId,
+        productId,
+      });
+      return null;
+    }
+
+    // 찜한 사용자 정보 조회 (닉네임)
+    const likerSnapshot = await db.collection("users").doc(likerId).get();
+    const likerData = likerSnapshot.data() || {};
+    const likerName = toCleanString(likerData.nickname) || "누군가";
+
+    const notification = {
+      title: "❤️ 누군가 내 상품을 찜했어요!",
+      body: buildNotificationBody(`${likerName}님이 '${productTitle}'에 관심을 보이고 있어요`),
+    };
+
+    const data = {
+      type: "like",
+      productId: productId,
+      productTitle: productTitle,
+      likerId: likerId,
+      likeAction: "true",
+    };
+
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification,
+      data,
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "snow_paradise_default",
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: "default",
+          },
+        },
+      },
+    });
+
+    const invalidTokens = [];
+    const errorStats = {};
+    response.responses.forEach((result, index) => {
+      if (result.success) {
+        return;
+      }
+      const errorCode = result.error?.code ?? "unknown";
+      errorStats[errorCode] = (errorStats[errorCode] ?? 0) + 1;
+      if (
+        errorCode === "messaging/registration-token-not-registered" ||
+        errorCode === "messaging/invalid-registration-token"
+      ) {
+        invalidTokens.push(tokens[index]);
+      }
+    });
+
+    if (invalidTokens.length > 0) {
+      await db.collection("users").doc(sellerId).update({
+        fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens),
+      });
+      functions.logger.info("Removed invalid FCM tokens.", {
+        sellerId,
+        removedCount: invalidTokens.length,
+      });
+    }
+
+    functions.logger.info("Like notification FCM send result.", {
+      productId,
+      sellerId,
+      likerId,
+      tokens: tokens.length,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      errorStats,
+    });
+
+    return null;
+  });

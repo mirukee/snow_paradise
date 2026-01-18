@@ -90,7 +90,8 @@ class _LikeListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final isSoldOut = product.status == ProductStatus.soldOut;
+    final isSoldOut = product.status == ProductStatus.soldOut ||
+        product.status == ProductStatus.hidden;
 
     return Opacity(
       opacity: isSoldOut ? 0.5 : 1,

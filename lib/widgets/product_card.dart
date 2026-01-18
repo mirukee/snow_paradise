@@ -23,6 +23,7 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const secondaryColor = Color(0xFF101922);
+    const mutedText = Color(0xFF8A94A6);
     final isSoldOut = product.status == ProductStatus.soldOut;
     final hasStatus = product.status != ProductStatus.forSale;
 
@@ -30,26 +31,25 @@ class ProductCard extends StatelessWidget {
       opacity: isSoldOut ? 0.5 : 1,
       child: Material(
         color: Colors.white,
-        elevation: 1,
-        shadowColor: Colors.black.withOpacity(0.08),
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: Colors.grey.shade100),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AspectRatio(
-                aspectRatio: 6 / 5,
+                aspectRatio: 4 / 5,
                 child: Stack(
                   children: [
                     Positioned.fill(
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(24),
+                          top: Radius.circular(16),
                         ),
                         child: Container(
                           color: Colors.grey.shade100,
@@ -80,7 +80,7 @@ class ProductCard extends StatelessWidget {
                           customBorder: const CircleBorder(),
                           onTap: onLikeTap,
                           child: Padding(
-                            padding: const EdgeInsets.all(5),
+                            padding: const EdgeInsets.all(6),
                             child: Icon(
                               isLiked
                                   ? Icons.favorite
@@ -97,39 +97,39 @@ class ProductCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: mutedText,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
                       product.title,
                       style: const TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         color: secondaryColor,
                         height: 1.2,
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       priceText,
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: secondaryColor,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.grey[500],
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -153,10 +153,10 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF101922).withOpacity(0.9),
-        borderRadius: BorderRadius.circular(999),
+        color: const Color(0xFF101922).withOpacity(0.7),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         label,

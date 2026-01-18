@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/chat_model.dart';
+import '../models/product.dart';
 import '../models/user_model.dart';
+import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../services/chat_service.dart';
 import 'chat_screen.dart';
@@ -90,6 +92,7 @@ class ChatListScreen extends StatelessWidget {
     final currentUser = context.watch<UserService>().currentUser;
     final currentUserId = currentUser?.uid;
     final chatService = context.read<ChatService>();
+    final productService = context.watch<ProductService>();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -148,6 +151,11 @@ class ChatListScreen extends StatelessWidget {
                         ? room.unreadCountSeller
                         : room.unreadCountBuyer;
                     final otherUserId = _resolveOtherUserId(room, currentUserId);
+                    final product = productService.getProductById(room.productId);
+                    final isHiddenForViewer =
+                        product?.status == ProductStatus.hidden &&
+                            currentUserId != null &&
+                            room.sellerId != currentUserId;
 
                     return StreamBuilder<
                         DocumentSnapshot<Map<String, dynamic>>>(
@@ -216,33 +224,45 @@ class ChatListScreen extends StatelessWidget {
                               const SizedBox(width: 10),
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
-                                child: room.productImageUrl.isNotEmpty
-                                    ? Image.network(
-                                        room.productImageUrl,
-                                        width: 50,
-                                        height: 50,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => Container(
-                                          width: 50,
-                                          height: 50,
-                                          color: Colors.grey[200],
-                                          child: const Icon(
-                                            Icons.image_not_supported,
-                                            color: Colors.grey,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      )
-                                    : Container(
+                                child: isHiddenForViewer
+                                    ? Container(
                                         width: 50,
                                         height: 50,
                                         color: Colors.grey[200],
                                         child: const Icon(
-                                          Icons.image,
+                                          Icons.lock_outline,
                                           color: Colors.grey,
                                           size: 20,
                                         ),
-                                      ),
+                                      )
+                                    : room.productImageUrl.isNotEmpty
+                                        ? Image.network(
+                                            room.productImageUrl,
+                                            width: 50,
+                                            height: 50,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                Container(
+                                              width: 50,
+                                              height: 50,
+                                              color: Colors.grey[200],
+                                              child: const Icon(
+                                                Icons.image_not_supported,
+                                                color: Colors.grey,
+                                                size: 20,
+                                              ),
+                                            ),
+                                          )
+                                        : Container(
+                                            width: 50,
+                                            height: 50,
+                                            color: Colors.grey[200],
+                                            child: const Icon(
+                                              Icons.image,
+                                              color: Colors.grey,
+                                              size: 20,
+                                            ),
+                                          ),
                               ),
                             ],
                           ),

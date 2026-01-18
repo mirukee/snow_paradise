@@ -1,8 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
 import '../models/product.dart';
+import '../models/user_model.dart';
 import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../widgets/product_image.dart';
@@ -62,7 +64,11 @@ class SellerProfileScreen extends StatelessWidget {
     final trimmedSellerId = sellerId.trim();
     if (trimmedSellerId.isNotEmpty) {
       return products
-          .where((product) => product.sellerId == trimmedSellerId)
+          .where(
+            (product) =>
+                product.sellerId == trimmedSellerId &&
+                product.status != ProductStatus.hidden,
+          )
           .toList();
     }
     final trimmedName = sellerName.trim();
@@ -71,7 +77,8 @@ class SellerProfileScreen extends StatelessWidget {
         .where(
           (product) =>
               product.sellerName == trimmedName &&
-              product.sellerProfile == trimmedProfile,
+              product.sellerProfile == trimmedProfile &&
+              product.status != ProductStatus.hidden,
         )
         .toList();
   }
@@ -102,94 +109,131 @@ class SellerProfileScreen extends StatelessWidget {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final tags = _buildTags(products);
     const temperature = 37.5;
+    final trimmedSellerId = sellerId.trim();
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: _background,
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          centerTitle: true,
-          surfaceTintColor: Colors.white,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: _deepNavy),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: const Text(
-            '판매자 프로필',
-            style: TextStyle(
-              color: _deepNavy,
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
+    Widget buildProfile({
+      required String displayName,
+      required String profileImageUrl,
+    }) {
+      return DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          backgroundColor: _background,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            centerTitle: true,
+            surfaceTintColor: Colors.white,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: _deepNavy),
+              onPressed: () => Navigator.pop(context),
             ),
-          ),
-          actions: [
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(Icons.share, color: _deepNavy),
+            title: const Text(
+              '판매자 프로필',
+              style: TextStyle(
+                color: _deepNavy,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
             ),
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(Icons.more_vert, color: _deepNavy),
-            ),
-          ],
-        ),
-        body: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) {
-            return [
-              SliverToBoxAdapter(
-                child: _SellerHeader(
-                  sellerName: sellerName,
-                  sellerProfileImage: sellerProfileImage,
-                  tags: tags,
-                  temperature: temperature,
-                ),
+            actions: [
+              IconButton(
+                onPressed: () {},
+                icon: const Icon(Icons.share, color: _deepNavy),
               ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 8),
+              IconButton(
+                onPressed: () {},
+                icon: const Icon(Icons.more_vert, color: _deepNavy),
               ),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _SellerTabBarDelegate(
-                  TabBar(
-                    labelColor: _deepNavy,
-                    unselectedLabelColor: Colors.grey.shade500,
-                    labelStyle: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                    unselectedLabelStyle: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                    indicator: const UnderlineTabIndicator(
-                      borderSide: BorderSide(width: 3, color: _iceBlue),
-                      insets: EdgeInsets.symmetric(horizontal: 24),
-                    ),
-                    tabs: [
-                      Tab(text: '판매 물품 (${products.length})'),
-                      const Tab(text: '받은 후기 (0)'),
-                    ],
-                  ),
-                ),
-              ),
-            ];
-          },
-          body: TabBarView(
-            children: [
-              _SellerProductGrid(
-                products: products,
-                productService: productService,
-                currentUser: currentUser,
-                formatPrice: _formatPrice,
-                formatTimeAgo: _formatTimeAgo,
-              ),
-              const _SellerReviewPlaceholder(),
             ],
           ),
+          body: NestedScrollView(
+            headerSliverBuilder: (context, innerBoxIsScrolled) {
+              return [
+                SliverToBoxAdapter(
+                  child: _SellerHeader(
+                    sellerName: displayName,
+                    sellerProfileImage: profileImageUrl,
+                    tags: tags,
+                    temperature: temperature,
+                  ),
+                ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 8),
+                ),
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _SellerTabBarDelegate(
+                    TabBar(
+                      labelColor: _deepNavy,
+                      unselectedLabelColor: Colors.grey.shade500,
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                      unselectedLabelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                      indicator: const UnderlineTabIndicator(
+                        borderSide: BorderSide(width: 3, color: _iceBlue),
+                        insets: EdgeInsets.symmetric(horizontal: 24),
+                      ),
+                      tabs: [
+                        Tab(text: '판매 물품 (${products.length})'),
+                        const Tab(text: '받은 후기 (0)'),
+                      ],
+                    ),
+                  ),
+                ),
+              ];
+            },
+            body: TabBarView(
+              children: [
+                _SellerProductGrid(
+                  products: products,
+                  productService: productService,
+                  currentUser: currentUser,
+                  formatPrice: _formatPrice,
+                  formatTimeAgo: _formatTimeAgo,
+                ),
+                const _SellerReviewPlaceholder(),
+              ],
+            ),
+          ),
         ),
-      ),
+      );
+    }
+
+    if (trimmedSellerId.isEmpty) {
+      final fallbackName = sellerName.isEmpty ? '판매자' : sellerName;
+      return buildProfile(
+        displayName: fallbackName,
+        profileImageUrl: sellerProfileImage,
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(trimmedSellerId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data();
+        final userModel = data == null ? null : UserModel.fromJson(data);
+        final resolvedName = userModel?.nickname.trim().isNotEmpty == true
+            ? userModel!.nickname
+            : (sellerName.isEmpty ? '판매자' : sellerName);
+        final hasUserDoc = data != null;
+        final profileImageUrl = userModel?.profileImageUrl?.trim() ?? '';
+        final resolvedProfileImage =
+            hasUserDoc ? profileImageUrl : sellerProfileImage;
+
+        return buildProfile(
+          displayName: resolvedName,
+          profileImageUrl: resolvedProfileImage,
+        );
+      },
     );
   }
 }
@@ -210,6 +254,9 @@ class _SellerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasProfileImage = sellerProfileImage.trim().isNotEmpty;
+    final ImageProvider avatarImage = hasProfileImage
+        ? NetworkImage(sellerProfileImage)
+        : const AssetImage('assets/images/user_default.png');
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
@@ -220,11 +267,7 @@ class _SellerHeader extends StatelessWidget {
               CircleAvatar(
                 radius: 46,
                 backgroundColor: const Color(0xFFE8F4FA),
-                backgroundImage:
-                    hasProfileImage ? NetworkImage(sellerProfileImage) : null,
-                child: hasProfileImage
-                    ? null
-                    : const Icon(Icons.person, color: Colors.grey, size: 42),
+                backgroundImage: avatarImage,
               ),
               Positioned(
                 right: 4,
@@ -473,7 +516,8 @@ class _SellerProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isSoldOut = product.status == ProductStatus.soldOut;
+    final isSoldOut = product.status == ProductStatus.soldOut ||
+        product.status == ProductStatus.hidden;
     final isReserved = product.status == ProductStatus.reserved;
     final statusLabel = product.status.label;
 

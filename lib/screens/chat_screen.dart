@@ -277,6 +277,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final roomId = widget.room.roomId;
     final productService = context.watch<ProductService>();
     final product = productService.getProductById(widget.room.productId);
+    final isHiddenForViewer =
+        product?.status == ProductStatus.hidden &&
+            currentUserId != null &&
+            widget.room.sellerId != currentUserId;
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: otherUserId == null || otherUserId.isEmpty
@@ -430,62 +434,86 @@ class _ChatScreenState extends State<ChatScreen> {
                     bottom: BorderSide(color: Colors.grey[200]!),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: widget.room.productImageUrl.isNotEmpty
-                          ? Image.network(
-                              widget.room.productImageUrl,
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 56,
-                                height: 56,
-                                color: Colors.grey[200],
-                                child: const Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            )
-                          : Container(
-                              width: 56,
-                              height: 56,
-                              color: Colors.grey[200],
-                              child: const Icon(
-                                Icons.image,
+                child: isHiddenForViewer
+                    ? Row(
+                        children: const [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: Color(0xFFE2E8F0),
+                            child: Icon(
+                              Icons.lock_outline,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '숨김 처리된 상품입니다.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
                                 color: Colors.grey,
                               ),
                             ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.room.productTitle,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _formatPrice(widget.room.productPrice),
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
                           ),
                         ],
+                      )
+                    : Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: widget.room.productImageUrl.isNotEmpty
+                                ? Image.network(
+                                    widget.room.productImageUrl,
+                                    width: 56,
+                                    height: 56,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      width: 56,
+                                      height: 56,
+                                      color: Colors.grey[200],
+                                      child: const Icon(
+                                        Icons.image_not_supported,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 56,
+                                    height: 56,
+                                    color: Colors.grey[200],
+                                    child: const Icon(
+                                      Icons.image,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.room.productTitle,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _formatPrice(widget.room.productPrice),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _buildStatusBadge(context, product?.status),
+                        ],
                       ),
-                    ),
-                    _buildStatusBadge(context, product?.status),
-                  ],
-                ),
               ),
               Expanded(
                 child: StreamBuilder<List<ChatMessage>>(

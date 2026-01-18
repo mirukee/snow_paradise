@@ -145,7 +145,8 @@ class CategoryProductScreen extends StatelessWidget {
     ProductService productService,
   ) {
     final isLiked = productService.isLiked(product.id);
-    final isSoldOut = product.status == ProductStatus.soldOut;
+    final isSoldOut = product.status == ProductStatus.soldOut ||
+        product.status == ProductStatus.hidden;
     final hasEngagement = product.likeCount > 0 || product.chatCount > 0;
 
     return Opacity(

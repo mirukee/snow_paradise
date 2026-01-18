@@ -41,7 +41,13 @@ class ProductService extends ChangeNotifier {
   List<Product> get productList => _productList;
 
   List<Product> getByCategory(String category) {
-    return _productList.where((product) => product.category == category).toList();
+    return _productList
+        .where(
+          (product) =>
+              product.category == category &&
+              product.status != ProductStatus.hidden,
+        )
+        .toList();
   }
 
   Product? getProductById(String productId) {
@@ -55,7 +61,13 @@ class ProductService extends ChangeNotifier {
 
   // 찜한 상품만 가져오는 함수
   List<Product> get likedProducts {
-    return _productList.where((product) => _likedProductIds.contains(product.id)).toList();
+    return _productList
+        .where(
+          (product) =>
+              _likedProductIds.contains(product.id) &&
+              product.status != ProductStatus.hidden,
+        )
+        .toList();
   }
 
   Future<List<Product>> getWishlistProducts(String uid) async {
@@ -96,7 +108,9 @@ class ProductService extends ChangeNotifier {
     }));
 
     final filteredProducts = products.whereType<Product>().toList();
-    return _filterBlockedProducts(filteredProducts);
+    return _filterBlockedProducts(filteredProducts)
+        .where((product) => product.status != ProductStatus.hidden)
+        .toList();
   }
 
   // 찜 여부 확인 함수
@@ -289,6 +303,9 @@ class ProductService extends ChangeNotifier {
 
     final suggestions = <String>{};
     for (final product in _productList) {
+      if (product.status == ProductStatus.hidden) {
+        continue;
+      }
       if (product.title.toLowerCase().contains(normalizedQuery)) {
         suggestions.add(product.title);
       }
@@ -325,7 +342,9 @@ class ProductService extends ChangeNotifier {
     queryRef = queryRef.orderBy('createdAt', descending: true);
     final snapshot = await queryRef.get();
     final products = snapshot.docs.map(_productFromDoc).toList();
-    return _filterBlockedProducts(products);
+    return _filterBlockedProducts(products)
+        .where((product) => product.status != ProductStatus.hidden)
+        .toList();
   }
 
   Product _productFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {

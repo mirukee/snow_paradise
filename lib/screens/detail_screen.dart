@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // [추가] Provider 패키지
 import '../models/product.dart';
+import '../models/user_model.dart';
 import '../providers/product_service.dart'; // [추가] ProductService
 import '../providers/user_service.dart';
 import '../services/report_service.dart';
@@ -180,6 +182,8 @@ class _DetailScreenState extends State<DetailScreen> {
         return Colors.green;
       case ProductStatus.soldOut:
         return Colors.grey;
+      case ProductStatus.hidden:
+        return Colors.grey;
     }
   }
 
@@ -277,6 +281,11 @@ class _DetailScreenState extends State<DetailScreen> {
     final isLiked = productService.isLiked(currentProduct.id);
     final hasEngagement =
         currentProduct.likeCount > 0 || currentProduct.chatCount > 0;
+    final sellerId = currentProduct.sellerId.trim();
+    final fallbackSellerName = currentProduct.sellerName.trim().isNotEmpty
+        ? currentProduct.sellerName.trim()
+        : '판매자';
+    final fallbackSellerProfile = currentProduct.sellerProfile.trim();
     final currentUserId = currentUser?.uid;
     final currentUserName = currentUser?.displayName ?? currentUser?.email ?? '';
     final currentUserPhoto = currentUser?.photoURL ?? '';
@@ -290,6 +299,30 @@ class _DetailScreenState extends State<DetailScreen> {
     const textDark = Color(0xFF111518);
     const softBorder = Color(0xFFE3EEF8);
     const softSurface = Color(0xFFF5F8FC);
+
+    if (displayStatus == ProductStatus.hidden && !isOwner) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text(
+            '상품 보기',
+            style: TextStyle(fontWeight: FontWeight.bold, color: textDark),
+          ),
+          backgroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: const Center(
+          child: Text(
+            '숨김 처리된 상품입니다.',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -381,78 +414,164 @@ class _DetailScreenState extends State<DetailScreen> {
                             ),
                           ],
                         ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: () {
-                            if (currentProduct.sellerId.isEmpty &&
-                                currentProduct.sellerName.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('판매자 정보를 찾을 수 없어요.'),
-                                ),
-                              );
-                              return;
-                            }
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => SellerProfileScreen(
-                                  sellerId: currentProduct.sellerId,
-                                  sellerName: currentProduct.sellerName,
-                                  sellerProfileImage:
-                                      currentProduct.sellerProfile,
-                                ),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 22,
-                                  backgroundColor: Colors.grey.shade200,
-                                  backgroundImage:
-                                      currentProduct.sellerProfile.isNotEmpty
-                                          ? NetworkImage(
-                                              currentProduct.sellerProfile,
-                                            )
-                                          : null,
-                                  child: currentProduct.sellerProfile.isEmpty
-                                      ? const Icon(Icons.person,
-                                          color: Colors.grey)
-                                      : null,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                        child: sellerId.isEmpty
+                            ? InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: () {
+                                  if (currentProduct.sellerName.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('판매자 정보를 찾을 수 없어요.'),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => SellerProfileScreen(
+                                        sellerId: currentProduct.sellerId,
+                                        sellerName: fallbackSellerName,
+                                        sellerProfileImage: fallbackSellerProfile,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        currentProduct.sellerName,
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                          color: textDark,
+                                      CircleAvatar(
+                                        radius: 22,
+                                        backgroundColor: Colors.grey.shade200,
+                                        backgroundImage:
+                                            fallbackSellerProfile.isNotEmpty
+                                                ? NetworkImage(
+                                                    fallbackSellerProfile,
+                                                  )
+                                                : const AssetImage(
+                                                    'assets/images/user_default.png',
+                                                  ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              fallbackSellerName,
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: textDark,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '판매자',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '판매자',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
+                                      _buildStatusChip(context, displayStatus),
                                     ],
                                   ),
                                 ),
-                                _buildStatusChip(context, displayStatus),
-                              ],
-                            ),
-                          ),
-                        ),
+                              )
+                            : StreamBuilder<
+                                DocumentSnapshot<Map<String, dynamic>>>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(sellerId)
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  final data = snapshot.data?.data();
+                                  final userModel =
+                                      data == null ? null : UserModel.fromJson(data);
+                                  final resolvedName =
+                                      userModel?.nickname.trim().isNotEmpty == true
+                                          ? userModel!.nickname
+                                          : fallbackSellerName;
+                                  final userProfileImage =
+                                      userModel?.profileImageUrl?.trim() ?? '';
+                                  final resolvedProfileImage =
+                                      data == null ? '' : userProfileImage;
+                                  final ImageProvider avatarImage =
+                                      resolvedProfileImage.isNotEmpty
+                                          ? NetworkImage(resolvedProfileImage)
+                                          : const AssetImage(
+                                              'assets/images/user_default.png',
+                                            );
+
+                                  return InkWell(
+                                    borderRadius: BorderRadius.circular(20),
+                                    onTap: () {
+                                      if (currentProduct.sellerName.trim().isEmpty &&
+                                          currentProduct.sellerId.isEmpty) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('판매자 정보를 찾을 수 없어요.'),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => SellerProfileScreen(
+                                            sellerId: currentProduct.sellerId,
+                                            sellerName: resolvedName,
+                                            sellerProfileImage: resolvedProfileImage,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 22,
+                                            backgroundColor: Colors.grey.shade200,
+                                            backgroundImage: avatarImage,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  resolvedName,
+                                                  style: const TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: textDark,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '판매자',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey.shade600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          _buildStatusChip(context, displayStatus),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                       ),
                       const SizedBox(height: 24),
                       const Text(
@@ -637,7 +756,8 @@ class _DetailScreenState extends State<DetailScreen> {
                   currentProduct,
                   productService,
                   isLiked,
-                  displayStatus == ProductStatus.soldOut,
+                  displayStatus == ProductStatus.soldOut ||
+                      displayStatus == ProductStatus.hidden,
                 ),
         ),
       ),

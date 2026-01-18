@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum ProductStatus { forSale, reserved, soldOut }
+enum ProductStatus { forSale, reserved, soldOut, hidden }
 
 ProductStatus productStatusFromString(String? value) {
   switch (value) {
@@ -8,6 +8,8 @@ ProductStatus productStatusFromString(String? value) {
       return ProductStatus.reserved;
     case 'soldOut':
       return ProductStatus.soldOut;
+    case 'hidden':
+      return ProductStatus.hidden;
     case 'forSale':
     default:
       return ProductStatus.forSale;
@@ -23,6 +25,8 @@ extension ProductStatusX on ProductStatus {
         return 'reserved';
       case ProductStatus.soldOut:
         return 'soldOut';
+      case ProductStatus.hidden:
+        return 'hidden';
     }
   }
 
@@ -34,6 +38,8 @@ extension ProductStatusX on ProductStatus {
         return '예약중';
       case ProductStatus.soldOut:
         return '거래완료';
+      case ProductStatus.hidden:
+        return '숨김';
     }
   }
 }

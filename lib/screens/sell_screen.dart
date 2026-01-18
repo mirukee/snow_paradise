@@ -6,6 +6,7 @@ import '../models/product.dart';
 import '../providers/product_service.dart';
 import '../providers/main_tab_provider.dart';
 import '../providers/user_service.dart';
+import '../services/user_service.dart' as profile_service;
 import '../widgets/product_image.dart';
 
 class SellScreen extends StatefulWidget {
@@ -126,8 +127,20 @@ class _SellScreenState extends State<SellScreen> {
                 );
                 return;
               }
-              final sellerName = currentUser.displayName ?? currentUser.email ?? '익명';
-              final sellerProfile = currentUser.photoURL ?? '';
+              String sellerName =
+                  currentUser.displayName ?? currentUser.email ?? '익명';
+              String sellerProfile = '';
+              try {
+                final profileUser = await profile_service.UserService()
+                    .getUser(currentUser.uid);
+                final nickname = profileUser?.nickname.trim() ?? '';
+                if (nickname.isNotEmpty) {
+                  sellerName = nickname;
+                }
+                sellerProfile = profileUser?.profileImageUrl?.trim() ?? '';
+              } catch (_) {
+                sellerProfile = '';
+              }
               final localImagePath =
                   _selectedImages.isNotEmpty ? _selectedImages.first.path : null;
               final product = Product(

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +11,9 @@ import 'detail_screen.dart';
 import 'search_screen.dart';
 
 const _secondaryColor = Color(0xFF101922);
+const _iceBlue = Color(0xFF00AEEF);
+const _iceBlueSoft = Color(0xFFE2F0FD);
+const _mutedText = Color(0xFF8A94A6);
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -59,35 +64,54 @@ class HomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final productService = context.watch<ProductService>();
-    final products = productService.productList;
+    final products = productService.productList
+        .where((product) => product.status != ProductStatus.hidden)
+        .toList();
     final currentUser = context.watch<UserService>().currentUser;
     final topPadding = MediaQuery.of(context).padding.top;
-    const headerContentHeight = 124.0;
+    const headerContentHeight = 140.0;
     final headerHeight = topPadding + headerContentHeight;
     final screenWidth = MediaQuery.of(context).size.width;
-    final categoryCardWidth = (screenWidth - 32 - 12) / 2;
-    const categoryCardHeight = 140.0;
+    final categoryChipWidth = (screenWidth - 32 - 12) / 2;
 
     final categories = [
       const _CategoryItem(
         title: '스키',
-        imageUrl:
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuDGXCBIT71l6t3sL4c2gn6uXyzELL1nGh38plSoolG4CtCw7932mRj10nYBCJdlmiL5SU9xYYXjEtqU5EcVceCUH_KpyYfJIvC1Jw5awFwiNNeckN_qTb1EojGV_udjPsi5cGQKJ4lJNMSmiX1JNsFFfbO-32-RnI4yTSqXp_7Qw9xPu7_r9vlyGc5LhIa6khZJyrHDP8yy4gVAUade_vZyhnliLHQkOnSnNJTnHX2GbTFHySS75mCu-B5i2DbYqez0rpxM7t96DS3m',
+        icon: Icons.downhill_skiing,
+        isActive: true,
       ),
       const _CategoryItem(
         title: '스노우보드',
+        icon: Icons.snowboarding,
+      ),
+      const _CategoryItem(
+        title: '부츠',
+        icon: Icons.hiking,
+      ),
+      const _CategoryItem(
+        title: '헬멧',
+        icon: Icons.sports_motorsports,
+      ),
+      const _CategoryItem(
+        title: '고글',
+        icon: Icons.visibility,
+      ),
+    ];
+
+    final banners = [
+      const _HeroBanner(
+        label: '커뮤니티 마켓',
+        title: '중고 장비 판매하기',
+        subtitle: '동네 스노우보더와 빠른 거래',
         imageUrl:
             'https://lh3.googleusercontent.com/aida-public/AB6AXuBjrqa2RXzuWYtD-qjEijlOUeOYQG3kYLNohPRKrv0injxhJ1D6XSmE8GkvYDeAgWIMoJ-qVEJpIHoeqrvxyazId-Jke-8W6K3kGXc0MDsLZaO6WjRiL9N8h1v5rFVipKlazlQnhgjy1OivFfjJKZ3CGN5HgkaIv3idUZiQmYc-CrVqMzNqiTp3Q748nprAsK9XqnOyZa_R1tZYMsbReDRxgB1X3mo1nac6zGeLynVS1eQ2srEL8CsHJ4N2H3kZcU9uzlEtY75rlz8a',
       ),
-      const _CategoryItem(
-        title: '의류',
+      const _HeroBanner(
+        label: '트렌딩',
+        title: '빈티지 레어템',
+        subtitle: '컬렉터의 유니크한 스타일',
         imageUrl:
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuCbgANMCfc7wR_NYEa9w6tZt_Z-avm23VyGZXe1h5upJ-94DiBbc8e_hVAYkMTDvZycda8wJtLGRpk9TaBrQEi3ZvYtqf15izgBmIKcvBg9rqNC2arzKi0IFX50sq-szHK6RQBNVlkfgElsrKKD6eAqjxt0RtfBXfTN5W0VZYxR5JoiEdVnJJD0r4MRA642s3pzsO35odWiak0FEZlwrWv_GL8MJhOdU9F4Mc_o0RcDvFkDoB171FYJ4BZD5dCOtqSYzB4ehvDZJrWC',
-      ),
-      const _CategoryItem(
-        title: '장비/기타',
-        imageUrl:
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuCbggLa1k9qusrt2hjLyyvTyGH6eA3ZawF7HVXPlssp-3w8yS4H1RCKKDypAUdwErDYliYPmyYSpZM3hj7Oonaipq3okW4HENocEm5drbw2_WlkFTFh_kEMJEV2dKOZqlwr5e1dqFBBQiZ_0Zs_DJTvWMtG9Sp79iUq3T5yfZpeweOuS-1WdjXdCwti1KpuMvOIwIuZDiM4LB1zB96TvjfKM5ButAjpFcWI9HLhpPZw33tPJvKTWXVlb2bQK146FDlJZg_KZJ_MEdIn',
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuDGXCBIT71l6t3sL4c2gn6uXyzELL1nGh38plSoolG4CtCw7932mRj10nYBCJdlmiL5SU9xYYXjEtqU5EcVceCUH_KpyYfJIvC1Jw5awFwiNNeckN_qTb1EojGV_udjPsi5cGQKJ4lJNMSmiX1JNsFFfbO-32-RnI4yTSqXp_7Qw9xPu7_r9vlyGc5LhIa6khZJyrHDP8yy4gVAUade_vZyhnliLHQkOnSnNJTnHX2GbTFHySS75mCu-B5i2DbYqez0rpxM7t96DS3m',
       ),
     ];
 
@@ -115,23 +139,68 @@ class HomeTab extends StatelessWidget {
               },
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          const SliverToBoxAdapter(child: SizedBox(height: 12)),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 220,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: banners.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  return SizedBox(
+                    width: screenWidth * 0.85,
+                    child: _HeroBannerCard(banner: banners[index]),
+                  );
+                },
+              ),
+            ),
+          ),
           const SliverToBoxAdapter(
+            child: SizedBox(height: 20),
+          ),
+          SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '카테고리',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _secondaryColor,
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  const Text(
+                    '카테고리 둘러보기',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _secondaryColor,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('전체보기는 준비 중입니다.')),
+                      );
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: _iceBlue,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      '전체보기',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
           SliverToBoxAdapter(
             child: SizedBox(
-              height: categoryCardHeight,
+              height: 48,
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 scrollDirection: Axis.horizontal,
@@ -140,9 +209,8 @@ class HomeTab extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final item = categories[index];
                   return SizedBox(
-                    width: categoryCardWidth,
-                    height: categoryCardHeight,
-                    child: _CategoryCard(
+                    width: categoryChipWidth,
+                    child: _CategoryChip(
                       item: item,
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -163,33 +231,18 @@ class HomeTab extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
+                  const Icon(
+                    Icons.local_fire_department,
+                    color: Colors.redAccent,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 6),
                   const Text(
-                    '방금 올라온 상품',
+                    '신규 매물',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: _secondaryColor,
-                    ),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('더보기는 준비 중입니다.')),
-                      );
-                    },
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey[500],
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(40, 32),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      '더보기',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
                     ),
                   ),
                 ],
@@ -251,7 +304,7 @@ class HomeTab extends StatelessWidget {
                   crossAxisCount: 3,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: 0.72,
+                  childAspectRatio: 0.58,
                 ),
               ),
             ),
@@ -287,112 +340,97 @@ class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
-        boxShadow: [
-          if (overlapsContent)
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(8, topPadding + 8, 12, 12),
-        child: Column(
-          children: [
-            Row(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.95),
+            boxShadow: [
+              if (overlapsContent)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(12, topPadding + 10, 12, 12),
+            child: Column(
               children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      width: (MediaQuery.of(context).size.width - 24) * 0.42,
-                      height: 36,
-                      child: FittedBox(
-                        fit: BoxFit.contain,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Text(
-                              '스노우 파라다이스',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: _secondaryColor,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            );
-                          },
+                        child: SizedBox(
+                          width:
+                              (MediaQuery.of(context).size.width - 24) * 0.48,
+                          height: 32,
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    _HeaderIconButton(
+                      icon: Icons.notifications,
+                      onTap: onNotificationTap,
+                    ),
+                    const SizedBox(width: 6),
+                    _HeaderIconButton(
+                      icon: Icons.search,
+                      onTap: onSearchTap,
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 10),
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(999),
-                    onTap: onNotificationTap,
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Icon(
-                        Icons.notifications,
-                        color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: onSearchTap,
+                    child: Ink(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _iceBlueSoft,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFD7E6F5)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: const [
+                          SizedBox(width: 14),
+                          Icon(Icons.search, color: _mutedText, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '브랜드, 장비, 매물 검색...',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: _mutedText,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: onSearchTap,
-                child: Ink(
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade200),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 12),
-                      Icon(Icons.search, color: Colors.grey[500], size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '브랜드, 장비, 매물 검색...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[500],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -408,15 +446,17 @@ class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
 class _CategoryItem {
   const _CategoryItem({
     required this.title,
-    required this.imageUrl,
+    required this.icon,
+    this.isActive = false,
   });
 
   final String title;
-  final String imageUrl;
+  final IconData icon;
+  final bool isActive;
 }
 
-class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({
     required this.item,
     required this.onTap,
   });
@@ -426,49 +466,162 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isActive = item.isActive;
+    final backgroundColor = isActive ? _iceBlueSoft : Colors.white;
+    final borderColor = isActive ? const Color(0xFFD7E6F5) : const Color(0xFFE5E7EB);
+    final textColor = isActive ? _secondaryColor : const Color(0xFF3B4657);
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(32),
-            image: DecorationImage(
-              image: NetworkImage(item.imageUrl),
-              fit: BoxFit.cover,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(item.icon, size: 18, color: textColor),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  item.title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                    color: textColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(32),
-                    color: Colors.black.withOpacity(0.3),
-                  ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroBanner {
+  const _HeroBanner({
+    required this.label,
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+  });
+
+  final String label;
+  final String title;
+  final String subtitle;
+  final String imageUrl;
+}
+
+class _HeroBannerCard extends StatelessWidget {
+  const _HeroBannerCard({required this.banner});
+
+  final _HeroBanner banner;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.network(
+              banner.imageUrl,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.7),
+                    Colors.transparent,
+                  ],
                 ),
               ),
-              Positioned(
-                left: 12,
-                bottom: 12,
-                child: Text(
-                  item.title,
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _iceBlueSoft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    banner.label,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _secondaryColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  banner.title,
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
+                    height: 1.2,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  banner.subtitle,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Center(
+            child: Icon(icon, size: 20, color: _secondaryColor),
           ),
         ),
       ),

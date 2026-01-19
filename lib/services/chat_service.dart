@@ -79,22 +79,10 @@ class ChatService {
       'unreadCountSeller': 0,
       'lastMessage': '',
       'lastMessageTime': Timestamp.now(),
+      'isFirstMessageSent': false, // 첫 메시지 전송 시 true로 변경되며 chatCount 증가
     };
     final roomDoc = await _firestore.collection('chat_rooms').add(roomData);
-    try {
-      final snapshot = await _firestore
-          .collection('products')
-          .where('id', isEqualTo: productId)
-          .limit(1)
-          .get();
-      if (snapshot.docs.isNotEmpty) {
-        await snapshot.docs.first.reference.update({
-          'chatCount': FieldValue.increment(1),
-        });
-      }
-    } catch (_) {
-      // 채팅방 생성이 우선이므로 카운트 업데이트 실패는 무시합니다.
-    }
+    // chatCount 증가는 sendMessage에서 첫 메시지 전송 시 처리됨
 
     return ChatRoom.fromJson({
       ...roomData,
@@ -267,6 +255,30 @@ class ChatService {
     if (targetUnreadField != null) {
       updates[targetUnreadField] = FieldValue.increment(1);
     }
+
+    // 첫 메시지 전송 시 chatCount 증가 처리
+    final isFirstMessageSent = roomData['isFirstMessageSent'] ?? true;
+    if (!isFirstMessageSent) {
+      updates['isFirstMessageSent'] = true;
+      final productId = roomData['productId']?.toString();
+      if (productId != null && productId.isNotEmpty) {
+        try {
+          final productSnapshot = await _firestore
+              .collection('products')
+              .where('id', isEqualTo: productId)
+              .limit(1)
+              .get();
+          if (productSnapshot.docs.isNotEmpty) {
+            batch.update(productSnapshot.docs.first.reference, {
+              'chatCount': FieldValue.increment(1),
+            });
+          }
+        } catch (_) {
+          // 카운트 업데이트 실패는 무시합니다.
+        }
+      }
+    }
+
     batch.update(roomRef, updates);
     await batch.commit();
   }

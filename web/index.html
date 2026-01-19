@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -27,12 +28,49 @@
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png" />
 
   <title>snow_paradise</title>
   <link rel="manifest" href="manifest.json">
 </head>
+
 <body>
+  <script src="https://cdn.jsdelivr.net/npm/pica@9.0.1/dist/pica.min.js"></script>
+  <script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.js"></script>
+  <script>
+    async function convertHeicToJpeg(blob) {
+      console.log("convertHeicToJpeg called. Blob info: " + blob);
+      console.log("Blob size: " + blob.size + ", Type: " + blob.type);
+
+      try {
+        if (!window.heic2any) {
+          throw new Error("heic2any library not loaded");
+        }
+
+        // 옵션 최소화: blob과 toType만 지정
+        const resultBlob = await heic2any({
+          blob: blob,
+          toType: "image/jpeg",
+        });
+
+        const finalBlob = Array.isArray(resultBlob) ? resultBlob[0] : resultBlob;
+        console.log("HEIC conversion success.");
+        return finalBlob;
+      } catch (e) {
+        console.error("HEIC conversion failed in JS. Error object: " + e);
+        if (typeof e === 'object' && e !== null) {
+          if (e.code) console.error("Error Code: " + e.code);
+          if (e.message) console.error("Error Message: " + e.message);
+          for (var key in e) {
+            console.log("Err Prop [" + key + "]: " + e[key]);
+          }
+        }
+        throw e;
+      }
+    }
+
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
+
 </html>

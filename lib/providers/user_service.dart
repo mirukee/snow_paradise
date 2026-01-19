@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../services/auth_service.dart';
 import '../services/user_service.dart' as profile_service;
+import '../models/user_model.dart';
 
 class UserService extends ChangeNotifier {
   final FirebaseAuth _auth;
@@ -66,5 +67,42 @@ class UserService extends ChangeNotifier {
     await _profileService.deleteAccount();
     _currentUser = null;
     notifyListeners();
+  }
+
+  // --- Admin Methods ---
+
+  Future<List<UserModel>> getAllUsers() async {
+    return _profileService.getAllUsers();
+  }
+
+  Future<void> updateUserBanStatus(String uid, bool isBanned) async {
+    await _profileService.updateUserBanStatus(uid, isBanned);
+    notifyListeners();
+  }
+
+  Future<void> blockUser({
+    required String currentUid,
+    required String targetUid,
+  }) async {
+    await _profileService.blockUser(
+      currentUid: currentUid,
+      targetUid: targetUid,
+    );
+    notifyListeners();
+  }
+
+  Future<void> unblockUser({
+    required String currentUid,
+    required String targetUid,
+  }) async {
+    await _profileService.unblockUser(
+      currentUid: currentUid,
+      targetUid: targetUid,
+    );
+    notifyListeners();
+  }
+
+  Future<Set<String>> getBlockedUserIds(String uid) async {
+    return _profileService.getBlockedUserIds(uid);
   }
 }

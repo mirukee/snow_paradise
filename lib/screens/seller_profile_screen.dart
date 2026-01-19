@@ -8,6 +8,7 @@ import '../models/user_model.dart';
 import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../widgets/product_image.dart';
+import '../widgets/report_dialog.dart';
 import 'detail_screen.dart';
 
 class SellerProfileScreen extends StatelessWidget {
@@ -142,7 +143,110 @@ class SellerProfileScreen extends StatelessWidget {
                 icon: const Icon(Icons.share, color: _deepNavy),
               ),
               IconButton(
-                onPressed: () {},
+                onPressed: () async {
+                  if (trimmedSellerId.isEmpty) return;
+                  if (currentUser != null &&
+                      currentUser.uid == trimmedSellerId) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('본인 프로필입니다.')),
+                    );
+                    return;
+                  }
+                  if (currentUser == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('로그인이 필요합니다.')),
+                    );
+                    return;
+                  }
+
+                  // 차단 여부 확인
+                  final blockedIds = await context
+                      .read<UserService>()
+                      .getBlockedUserIds(currentUser.uid);
+                  final isBlocked = blockedIds.contains(trimmedSellerId);
+
+                  if (!context.mounted) return;
+
+                  showModalBottomSheet(
+                    context: context,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    builder: (context) => SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 8),
+                          ListTile(
+                            leading: const Icon(Icons.report_problem_rounded,
+                                color: Colors.redAccent),
+                            title: const Text('신고하기'),
+                            onTap: () {
+                              Navigator.pop(context); // Close bottom sheet
+                              showDialog(
+                                context: context,
+                                builder: (context) => ReportDialog(
+                                  targetUid: trimmedSellerId,
+                                  targetContentId: trimmedSellerId,
+                                  reportType: 'user',
+                                ),
+                              );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.block_rounded,
+                                color: Colors.grey),
+                            title: Text(isBlocked ? '차단 해제' : '차단하기'),
+                            onTap: () async {
+                              Navigator.pop(context); // Close bottom sheet
+                              try {
+                                if (isBlocked) {
+                                  await context
+                                      .read<UserService>()
+                                      .unblockUser(
+                                        currentUid: currentUser.uid,
+                                        targetUid: trimmedSellerId,
+                                      );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                          content: Text('차단이 해제되었습니다.')),
+                                    );
+                                  }
+                                } else {
+                                  await context
+                                      .read<UserService>()
+                                      .blockUser(
+                                        currentUid: currentUser.uid,
+                                        targetUid: trimmedSellerId,
+                                      );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                          content: Text('사용자를 차단했습니다.')),
+                                    );
+                                    // 차단 후 뒤로가기
+                                    Navigator.pop(context);
+                                  }
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('오류 발생: $e')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  );
+                },
                 icon: const Icon(Icons.more_vert, color: _deepNavy),
               ),
             ],

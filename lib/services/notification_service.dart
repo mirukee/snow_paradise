@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -9,12 +11,46 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../firebase_options.dart';
 import '../screens/chat_detail_screen.dart';
 
+/// 백그라운드/종료 상태에서 FCM 메시지 수신 시 호출되는 핸들러
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // 백그라운드/종료 상태에서 메시지를 받을 때 Firebase 초기화가 필요합니다.
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // [개선] 백그라운드에서도 알림을 Firestore에 저장
+  try {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null && message.messageId != null) {
+      // 알림 타입 결정
+      String typeStr = 'system';
+      if (message.data.containsKey('chatId') || message.data.containsKey('roomId')) {
+        typeStr = 'chat';
+      } else if (message.data.containsKey('productId') && message.data.containsKey('likeAction')) {
+        typeStr = 'like';
+      }
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .doc(message.messageId)
+          .set({
+        'id': message.messageId,
+        'userId': userId,
+        'type': typeStr,
+        'title': message.notification?.title ?? '새 알림',
+        'body': message.notification?.body ?? '',
+        'data': message.data,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+      debugPrint('백그라운드 알림 저장 완료: ${message.messageId}');
+    }
+  } catch (e) {
+    debugPrint('백그라운드 알림 저장 실패: $e');
+  }
 }
 
 class NotificationService {

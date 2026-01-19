@@ -7,8 +7,11 @@ import '../models/product.dart';
 import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../widgets/product_card.dart';
+import 'category_product_screen.dart';
 import 'detail_screen.dart';
 import 'search_screen.dart';
+import 'notification_screen.dart';
+import '../providers/main_tab_provider.dart';
 
 const _secondaryColor = Color(0xFF101922);
 const _iceBlue = Color(0xFF00AEEF);
@@ -85,16 +88,28 @@ class HomeTab extends StatelessWidget {
         icon: Icons.snowboarding,
       ),
       const _CategoryItem(
-        title: '부츠',
-        icon: Icons.hiking,
+        title: '의류',
+        icon: Icons.checkroom,
       ),
       const _CategoryItem(
-        title: '헬멧',
-        icon: Icons.sports_motorsports,
+        title: '장비/보호대',
+        icon: Icons.health_and_safety,
       ),
       const _CategoryItem(
-        title: '고글',
-        icon: Icons.visibility,
+        title: '시즌권',
+        icon: Icons.card_membership,
+      ),
+      const _CategoryItem(
+        title: '시즌방',
+        icon: Icons.home,
+      ),
+      const _CategoryItem(
+        title: '강습',
+        icon: Icons.school,
+      ),
+      const _CategoryItem(
+        title: '기타',
+        icon: Icons.more_horiz,
       ),
     ];
 
@@ -133,13 +148,15 @@ class HomeTab extends StatelessWidget {
                 );
               },
               onNotificationTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('알림 기능은 준비 중입니다.')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const NotificationScreen(),
+                  ),
                 );
               },
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 12)),
           SliverToBoxAdapter(
             child: SizedBox(
               height: 220,
@@ -176,9 +193,7 @@ class HomeTab extends StatelessWidget {
                   const Spacer(),
                   TextButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('전체보기는 준비 중입니다.')),
-                      );
+                      context.read<MainTabProvider>().setIndex(1); // 쇼핑 탭으로 이동
                     },
                     style: TextButton.styleFrom(
                       foregroundColor: _iceBlue,
@@ -213,9 +228,13 @@ class HomeTab extends StatelessWidget {
                     child: _CategoryChip(
                       item: item,
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${item.title} 카테고리 (준비 중)'),
+                        // 카테고리 상품 목록 화면으로 이동
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CategoryProductScreen(
+                              category: item.title,
+                            ),
                           ),
                         );
                       },
@@ -359,32 +378,28 @@ class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
             padding: EdgeInsets.fromLTRB(12, topPadding + 10, 12, 12),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: SizedBox(
-                          width:
-                              (MediaQuery.of(context).size.width - 24) * 0.48,
-                          height: 32,
-                          child: Image.asset(
-                            'assets/images/logo.png',
-                            fit: BoxFit.contain,
-                          ),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // 로고 - 중앙 정렬
+                      Image.asset(
+                        'assets/images/logo.png',
+                        height: 50,
+                        fit: BoxFit.contain,
+                      ),
+                      // 알림 버튼 - 오른쪽 끝
+                      Positioned(
+                        right: 0,
+                        child: _HeaderIconButton(
+                          icon: Icons.notifications,
+                          onTap: onNotificationTap,
                         ),
                       ),
-                    ),
-                    _HeaderIconButton(
-                      icon: Icons.notifications,
-                      onTap: onNotificationTap,
-                    ),
-                    const SizedBox(width: 6),
-                    _HeaderIconButton(
-                      icon: Icons.search,
-                      onTap: onSearchTap,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Material(

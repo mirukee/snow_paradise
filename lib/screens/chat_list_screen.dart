@@ -9,9 +9,20 @@ import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../services/chat_service.dart';
 import 'chat_screen.dart';
+import 'notification_screen.dart';
 
+/// 채팅 목록 화면
+/// Stitch 디자인 기반 - 프로필 이미지, 메시지, 상품 썸네일 표시
 class ChatListScreen extends StatelessWidget {
   const ChatListScreen({super.key});
+
+  // 색상 상수
+  static const Color primaryBlue = Color(0xFF3E97EA);
+  static const Color navyDark = Color(0xFF1A2B45);
+  static const Color textGrey = Color(0xFF64748B);
+  static const Color backgroundLight = Color(0xFFFFFFFF);
+  static const Color surfaceLight = Color(0xFFF8FAFC);
+  static const Color borderColor = Color(0xFFF1F5F9);
 
   String _formatLastTime(Timestamp timestamp) {
     final time = timestamp.toDate();
@@ -28,6 +39,9 @@ class ChatListScreen extends StatelessWidget {
       return '${difference.inHours}시간 전';
     }
     if (difference.inDays < 7) {
+      if (difference.inDays == 1) {
+        return '어제';
+      }
       return '${difference.inDays}일 전';
     }
     final month = time.month.toString().padLeft(2, '0');
@@ -68,25 +82,6 @@ class ChatListScreen extends StatelessWidget {
     return const AssetImage('assets/images/user_default.png');
   }
 
-  Widget _buildUnreadBadge(int count) {
-    if (count <= 0) {
-      return const SizedBox.shrink();
-    }
-    final displayCount = count > 99 ? '99+' : count.toString();
-    return CircleAvatar(
-      radius: 10,
-      backgroundColor: Colors.red,
-      child: Text(
-        displayCount,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentUser = context.watch<UserService>().currentUser;
@@ -95,196 +90,425 @@ class ChatListScreen extends StatelessWidget {
     final productService = context.watch<ProductService>();
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text(
-          '채팅',
-          style: TextStyle(fontWeight: FontWeight.bold),
+      backgroundColor: surfaceLight,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 헤더
+            _buildHeader(context),
+            // 채팅 목록
+            Expanded(
+              child: currentUser == null
+                  ? _buildLoginRequired()
+                  : _buildChatList(
+                      context,
+                      chatService,
+                      productService,
+                      currentUserId,
+                    ),
+            ),
+          ],
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: false,
-        automaticallyImplyLeading: false,
       ),
-      body: currentUser == null
-          ? const Center(
-              child: Text(
-                '채팅을 보려면 로그인이 필요합니다.',
-                style: TextStyle(color: Colors.grey),
-              ),
-            )
-          : StreamBuilder<List<ChatRoom>>(
-              stream: chatService.getChatRooms(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return const Center(
-                    child: Text('채팅 목록을 불러오지 못했어요.'),
-                  );
-                }
+    );
+  }
 
-                final rooms = snapshot.data ?? [];
-                if (rooms.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      '아직 시작한 채팅이 없습니다.',
-                      style: TextStyle(color: Colors.grey),
+  /// 헤더 - "채팅" 타이틀 + 검색/알림 아이콘
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: const BoxDecoration(
+        color: backgroundLight,
+        border: Border(
+          bottom: BorderSide(color: borderColor, width: 1),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            '채팅',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: navyDark,
+              letterSpacing: -0.3,
+            ),
+          ),
+          Row(
+            children: [
+              IconButton(
+                onPressed: () {
+                  // TODO: 채팅 검색 기능
+                },
+                icon: const Icon(
+                  Icons.search,
+                  color: textGrey,
+                  size: 24,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 16),
+              IconButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationScreen(),
                     ),
                   );
-                }
+                },
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  color: textGrey,
+                  size: 24,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-                return ListView.separated(
-                  itemCount: rooms.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final room = rooms[index];
-                    final lastMessage = room.lastMessage.isEmpty
-                        ? '대화를 시작해 보세요.'
-                        : room.lastMessage;
-                    final roomId = room.roomId ?? '';
-                    final isSeller =
-                        currentUserId != null && room.sellerId == currentUserId;
-                    final unreadCount = isSeller
-                        ? room.unreadCountSeller
-                        : room.unreadCountBuyer;
-                    final otherUserId = _resolveOtherUserId(room, currentUserId);
-                    final product = productService.getProductById(room.productId);
-                    final isHiddenForViewer =
-                        product?.status == ProductStatus.hidden &&
-                            currentUserId != null &&
-                            room.sellerId != currentUserId;
+  /// 로그인 필요 상태
+  Widget _buildLoginRequired() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 64,
+            color: textGrey,
+          ),
+          SizedBox(height: 16),
+          Text(
+            '채팅을 보려면 로그인이 필요합니다.',
+            style: TextStyle(
+              fontSize: 15,
+              color: textGrey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-                    return StreamBuilder<
-                        DocumentSnapshot<Map<String, dynamic>>>(
-                      stream: otherUserId == null || otherUserId.isEmpty
-                          ? Stream<
-                                  DocumentSnapshot<Map<String, dynamic>>>.empty()
-                          : FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(otherUserId)
-                              .snapshots(),
-                      builder: (context, userSnapshot) {
-                        final data = userSnapshot.data?.data();
-                        final userModel =
-                            data == null ? null : UserModel.fromJson(data);
-                        final otherName = _resolveOtherName(
-                          room,
-                          currentUserId,
-                          userModel: userModel,
-                        );
-                        final avatarImage = _resolveProfileImage(userModel);
+  /// 채팅 목록 스트림
+  Widget _buildChatList(
+    BuildContext context,
+    ChatService chatService,
+    ProductService productService,
+    String? currentUserId,
+  ) {
+    return StreamBuilder<List<ChatRoom>>(
+      stream: chatService.getChatRooms(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: primaryBlue,
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text(
+              '채팅 목록을 불러오지 못했어요.',
+              style: TextStyle(color: textGrey),
+            ),
+          );
+        }
 
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          leading: CircleAvatar(
-                            radius: 22,
-                            backgroundColor: Colors.grey[200],
-                            backgroundImage: avatarImage,
-                          ),
-                          title: Text(
-                            otherName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4),
+        final rooms = snapshot.data ?? [];
+        if (rooms.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        return Container(
+          color: backgroundLight,
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            itemCount: rooms.length,
+            itemBuilder: (context, index) {
+              final room = rooms[index];
+              return _buildChatItem(
+                context,
+                room,
+                productService,
+                currentUserId,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  /// 빈 상태
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 64,
+            color: textGrey,
+          ),
+          SizedBox(height: 16),
+          Text(
+            '아직 시작한 채팅이 없습니다.',
+            style: TextStyle(
+              fontSize: 15,
+              color: textGrey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 채팅 아이템 UI
+  Widget _buildChatItem(
+    BuildContext context,
+    ChatRoom room,
+    ProductService productService,
+    String? currentUserId,
+  ) {
+    final lastMessage =
+        room.lastMessage.isEmpty ? '대화를 시작해 보세요.' : room.lastMessage;
+    final roomId = room.roomId ?? '';
+    final isSeller = currentUserId != null && room.sellerId == currentUserId;
+    final unreadCount =
+        isSeller ? room.unreadCountSeller : room.unreadCountBuyer;
+    final otherUserId = _resolveOtherUserId(room, currentUserId);
+    final product = productService.getProductById(room.productId);
+    final isHiddenForViewer = product?.status == ProductStatus.hidden &&
+        currentUserId != null &&
+        room.sellerId != currentUserId;
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: otherUserId == null || otherUserId.isEmpty
+          ? Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
+          : FirebaseFirestore.instance
+              .collection('users')
+              .doc(otherUserId)
+              .snapshots(),
+      builder: (context, userSnapshot) {
+        final data = userSnapshot.data?.data();
+        final userModel = data == null ? null : UserModel.fromJson(data);
+        final otherName = _resolveOtherName(
+          room,
+          currentUserId,
+          userModel: userModel,
+        );
+        final avatarImage = _resolveProfileImage(userModel);
+
+        return InkWell(
+          onTap: roomId.isEmpty
+              ? null
+              : () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(room: room),
+                    ),
+                  );
+                },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: borderColor, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                // 프로필 이미지
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: borderColor, width: 1),
+                  ),
+                  child: ClipOval(
+                    child: Image(
+                      image: avatarImage,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.grey[200],
+                        child: const Icon(
+                          Icons.person,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // 메시지 내용
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 이름 + 시간
+                      Row(
+                        children: [
+                          Expanded(
                             child: Text(
-                              lastMessage,
+                              otherName,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: navyDark,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 14),
                             ),
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    _formatLastTime(room.lastMessageTime),
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildUnreadBadge(unreadCount),
-                                ],
-                              ),
-                              const SizedBox(width: 10),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: isHiddenForViewer
-                                    ? Container(
-                                        width: 50,
-                                        height: 50,
-                                        color: Colors.grey[200],
-                                        child: const Icon(
-                                          Icons.lock_outline,
-                                          color: Colors.grey,
-                                          size: 20,
-                                        ),
-                                      )
-                                    : room.productImageUrl.isNotEmpty
-                                        ? Image.network(
-                                            room.productImageUrl,
-                                            width: 50,
-                                            height: 50,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
-                                                Container(
-                                              width: 50,
-                                              height: 50,
-                                              color: Colors.grey[200],
-                                              child: const Icon(
-                                                Icons.image_not_supported,
-                                                color: Colors.grey,
-                                                size: 20,
-                                              ),
-                                            ),
-                                          )
-                                        : Container(
-                                            width: 50,
-                                            height: 50,
-                                            color: Colors.grey[200],
-                                            child: const Icon(
-                                              Icons.image,
-                                              color: Colors.grey,
-                                              size: 20,
-                                            ),
-                                          ),
-                              ),
-                            ],
+                          Text(
+                            _formatLastTime(room.lastMessageTime),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: textGrey,
+                            ),
                           ),
-                          onTap: roomId.isEmpty
-                              ? null
-                              : () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ChatScreen(
-                                        room: room,
-                                      ),
-                                    ),
-                                  );
-                                },
-                        );
-                      },
-                    );
-                  },
-                );
-              },
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // 마지막 메시지 + 읽지 않은 수
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              lastMessage,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: unreadCount > 0
+                                    ? const Color(0xFF1E293B)
+                                    : textGrey,
+                                fontWeight: unreadCount > 0
+                                    ? FontWeight.w500
+                                    : FontWeight.normal,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (unreadCount > 0)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: primaryBlue,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                unreadCount > 99
+                                    ? '99+'
+                                    : unreadCount.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // 상품 정보
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.sell_outlined,
+                            size: 14,
+                            color: textGrey,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              room.productTitle.isNotEmpty
+                                  ? room.productTitle
+                                  : '상품 정보 없음',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: textGrey,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // 상품 썸네일
+                _buildProductThumbnail(room, isHiddenForViewer),
+              ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 상품 썸네일
+  Widget _buildProductThumbnail(ChatRoom room, bool isHiddenForViewer) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: isHiddenForViewer
+            ? Container(
+                color: Colors.grey[200],
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: Colors.grey,
+                  size: 20,
+                ),
+              )
+            : room.productImageUrl.isNotEmpty
+                ? Image.network(
+                    room.productImageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey[200],
+                      child: const Icon(
+                        Icons.image_not_supported,
+                        color: Colors.grey,
+                        size: 20,
+                      ),
+                    ),
+                  )
+                : Container(
+                    color: Colors.grey[200],
+                    child: const Icon(
+                      Icons.image,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
+                  ),
+      ),
     );
   }
 }

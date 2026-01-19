@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 import '../models/chat_model.dart';
 import '../models/product.dart';
@@ -11,9 +10,12 @@ import '../providers/user_service.dart';
 import '../services/chat_service.dart';
 import '../services/report_service.dart';
 import '../services/user_service.dart' as safety_service;
+import 'detail_screen.dart';
 
 enum _ChatMenuAction { report, block, leave }
 
+/// 채팅방 화면
+/// Stitch 디자인 기반 - 상품 정보 바, 메시지 버블, 입력 영역
 class ChatScreen extends StatefulWidget {
   final ChatRoom room;
 
@@ -27,6 +29,14 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  // 색상 상수
+  static const Color primaryBlue = Color(0xFF3E97EA);
+  static const Color textDark = Color(0xFF111518);
+  static const Color textGrey = Color(0xFF637688);
+  static const Color backgroundChat = Color(0xFFF6F7F8);
+  static const Color surfaceLight = Color(0xFFFFFFFF);
+  static const Color borderColor = Color(0xFFF1F5F9);
+
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final int _pageSize = 30;
@@ -154,7 +164,6 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    // 빌드 도중 상태 변경을 피하기 위해 프레임 이후에 읽음 처리를 수행
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<ChatService>().markAsRead(roomId);
@@ -191,8 +200,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _formatPrice(int price) {
+    final buffer = StringBuffer();
     final priceString = price.toString();
-    final buffer = StringBuffer('₩ ');
     for (int i = 0; i < priceString.length; i++) {
       if (i > 0 && (priceString.length - i) % 3 == 0) {
         buffer.write(',');
@@ -204,7 +213,17 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _formatMessageTime(Timestamp timestamp) {
-    return DateFormat('HH:mm').format(timestamp.toDate());
+    final time = timestamp.toDate();
+    final hour = time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = hour < 12 ? '오전' : '오후';
+    final displayHour = hour <= 12 ? hour : hour - 12;
+    return '$period $displayHour:$minute';
+  }
+
+  String _formatDateSeparator(DateTime date) {
+    final weekdays = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
+    return '${date.year}년 ${date.month}월 ${date.day}일 ${weekdays[date.weekday - 1]}';
   }
 
   String _resolveOtherName(
@@ -237,50 +256,16 @@ class _ChatScreenState extends State<ChatScreen> {
     return const AssetImage('assets/images/user_default.png');
   }
 
-  Widget _buildStatusBadge(BuildContext context, ProductStatus? status) {
-    final theme = Theme.of(context);
-    final label = status?.label ?? '상태 확인중';
-    final Color color;
-    if (status == ProductStatus.forSale) {
-      color = theme.colorScheme.primary;
-    } else if (status == ProductStatus.reserved) {
-      color = Colors.green;
-    } else if (status == ProductStatus.soldOut) {
-      color = Colors.grey;
-    } else {
-      color = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentUserId = context.watch<UserService>().currentUser?.uid;
-    final primaryColor = Theme.of(context).colorScheme.primary;
     final otherUserId = _resolveOtherUserId(currentUserId);
     final roomId = widget.room.roomId;
     final productService = context.watch<ProductService>();
     final product = productService.getProductById(widget.room.productId);
-    final isHiddenForViewer =
-        product?.status == ProductStatus.hidden &&
-            currentUserId != null &&
-            widget.room.sellerId != currentUserId;
+    final isHiddenForViewer = product?.status == ProductStatus.hidden &&
+        currentUserId != null &&
+        widget.room.sellerId != currentUserId;
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: otherUserId == null || otherUserId.isEmpty
@@ -297,445 +282,733 @@ class _ChatScreenState extends State<ChatScreen> {
         final avatarImage = _resolveProfileImage(otherUser);
 
         return Scaffold(
-          backgroundColor: Colors.white,
-          appBar: AppBar(
-            title: Text(
-              otherName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          backgroundColor: backgroundChat,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // 헤더
+                _buildHeader(context, otherName, currentUserId, otherUserId),
+                // 상품 정보 바
+                _buildProductInfoBar(product, isHiddenForViewer),
+                // 메시지 영역
+                Expanded(
+                  child: _buildMessageArea(
+                    context,
+                    roomId,
+                    currentUserId,
+                    avatarImage,
+                  ),
+                ),
+                // 입력 영역
+                _buildInputArea(),
+              ],
             ),
-            actions: [
-              PopupMenuButton<_ChatMenuAction>(
-                onSelected: (action) async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  if (currentUserId == null || currentUserId.isEmpty) {
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('로그인이 필요합니다.')),
-                    );
-                    return;
-                  }
-                  if (otherUserId == null || otherUserId.isEmpty) {
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('상대방 정보를 찾을 수 없습니다.')),
-                    );
-                    return;
-                  }
-                  if (action == _ChatMenuAction.report) {
-                    final reason = await _promptReportReason(context);
-                    if (reason == null) {
-                      return;
-                    }
-                    try {
-                      final targetRoomId = roomId ?? '';
-                      if (targetRoomId.isEmpty) {
-                        throw StateError('채팅방 정보를 찾을 수 없습니다.');
-                      }
-                      await ReportService().reportItem(
-                        reporterUid: currentUserId,
-                        targetUid: otherUserId,
-                        targetContentId: targetRoomId,
-                        reason: reason,
-                      );
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('신고가 접수되었습니다.')),
-                      );
-                    } catch (_) {
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('신고에 실패했어요.')),
-                      );
-                    }
-                    return;
-                  }
-
-                  if (action == _ChatMenuAction.block) {
-                    final confirm = await _confirmAction(
-                      context,
-                      title: '사용자 차단',
-                      message: '이 사용자를 차단하시겠어요?',
-                      confirmLabel: '차단',
-                    );
-                    if (!confirm) {
-                      return;
-                    }
-                    try {
-                      await safety_service.UserService().blockUser(
-                        currentUid: currentUserId,
-                        targetUid: otherUserId,
-                      );
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('사용자를 차단했어요.')),
-                      );
-                      if (mounted) {
-                        Navigator.pop(context);
-                      }
-                    } catch (_) {
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('차단에 실패했어요.')),
-                      );
-                    }
-                    return;
-                  }
-
-                  if (action == _ChatMenuAction.leave) {
-                    final confirm = await _confirmAction(
-                      context,
-                      title: '채팅방 나가기',
-                      message: '이 채팅방을 나가시겠어요?',
-                      confirmLabel: '나가기',
-                    );
-                    if (!confirm) {
-                      return;
-                    }
-                    try {
-                      final targetRoomId = roomId ?? '';
-                      if (targetRoomId.isEmpty) {
-                        throw StateError('채팅방 정보를 찾을 수 없습니다.');
-                      }
-                      await context
-                          .read<ChatService>()
-                          .leaveChatRoom(targetRoomId);
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('채팅방을 나갔어요.')),
-                      );
-                      if (mounted) {
-                        Navigator.pop(context);
-                      }
-                    } catch (_) {
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('채팅방 나가기에 실패했어요.')),
-                      );
-                    }
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: _ChatMenuAction.report,
-                    child: Text('신고하기'),
-                  ),
-                  PopupMenuItem(
-                    value: _ChatMenuAction.block,
-                    child: Text('차단하기'),
-                  ),
-                  PopupMenuItem(
-                    value: _ChatMenuAction.leave,
-                    child: Text('채팅방 나가기'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey[200]!),
-                  ),
-                ),
-                child: isHiddenForViewer
-                    ? Row(
-                        children: const [
-                          CircleAvatar(
-                            radius: 28,
-                            backgroundColor: Color(0xFFE2E8F0),
-                            child: Icon(
-                              Icons.lock_outline,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              '숨김 처리된 상품입니다.',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: widget.room.productImageUrl.isNotEmpty
-                                ? Image.network(
-                                    widget.room.productImageUrl,
-                                    width: 56,
-                                    height: 56,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Container(
-                                      width: 56,
-                                      height: 56,
-                                      color: Colors.grey[200],
-                                      child: const Icon(
-                                        Icons.image_not_supported,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  )
-                                : Container(
-                                    width: 56,
-                                    height: 56,
-                                    color: Colors.grey[200],
-                                    child: const Icon(
-                                      Icons.image,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.room.productTitle,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _formatPrice(widget.room.productPrice),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          _buildStatusBadge(context, product?.status),
-                        ],
-                      ),
-              ),
-              Expanded(
-                child: StreamBuilder<List<ChatMessage>>(
-                  stream: roomId == null || roomId.isEmpty
-                      ? Stream<List<ChatMessage>>.empty()
-                      : context
-                          .read<ChatService>()
-                          .getMessages(roomId, limit: _messageLimit),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return const Center(
-                        child: Text('메시지를 불러오지 못했어요.'),
-                      );
-                    }
-
-                    final messages = snapshot.data ?? [];
-                    _markLatestAsReadIfNeeded(
-                      snapshot: snapshot,
-                      messages: messages,
-                      currentUserId: currentUserId,
-                      roomId: roomId,
-                    );
-                    _hasMore = messages.length >= _messageLimit;
-                    if (messages.isEmpty) {
-                      return const Center(
-                        child: Text(
-                          '아직 대화가 없습니다.',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      controller: _scrollController,
-                      reverse: true,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 20,
-                      ),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final message = messages[index];
-                        final isMe = message.senderId == currentUserId;
-
-                        final timeText =
-                            _formatMessageTime(message.createdAt);
-
-                        if (isMe) {
-                          return Align(
-                            alignment: Alignment.centerRight,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  margin:
-                                      const EdgeInsets.symmetric(vertical: 4),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  constraints: BoxConstraints(
-                                    maxWidth:
-                                        MediaQuery.of(context).size.width *
-                                            0.7,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: primaryColor,
-                                    borderRadius:
-                                        BorderRadius.circular(12).copyWith(
-                                      bottomRight: const Radius.circular(0),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    message.text,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (!message.isRead)
-                                      Container(
-                                        width: 6,
-                                        height: 6,
-                                        margin:
-                                            const EdgeInsets.only(right: 4),
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFFFFC107),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                    Text(
-                                      timeText,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Colors.grey[200],
-                                backgroundImage: avatarImage,
-                              ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    otherName,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 10,
-                                    ),
-                                    constraints: BoxConstraints(
-                                      maxWidth:
-                                          MediaQuery.of(context).size.width *
-                                              0.6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[200],
-                                      borderRadius:
-                                          BorderRadius.circular(12).copyWith(
-                                        bottomLeft: const Radius.circular(0),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      message.text,
-                                      style: const TextStyle(
-                                        color: Colors.black87,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    timeText,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.only(
-                  left: 16,
-                  right: 8,
-                  bottom: 30,
-                  top: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: Colors.grey[200]!)),
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: TextField(
-                          controller: _controller,
-                          decoration: const InputDecoration(
-                            hintText: '메시지 보내기',
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          onSubmitted: (_) => _sendMessage(),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _sendMessage,
-                      icon: Icon(Icons.send, color: primaryColor),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         );
       },
+    );
+  }
+
+  /// 헤더 - 뒤로가기, 상대방 이름, 더보기 메뉴
+  Widget _buildHeader(
+    BuildContext context,
+    String otherName,
+    String? currentUserId,
+    String? otherUserId,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: const BoxDecoration(
+        color: surfaceLight,
+        border: Border(
+          bottom: BorderSide(color: borderColor, width: 1),
+        ),
+      ),
+      child: SizedBox(
+        height: 56,
+        child: Row(
+          children: [
+            // 뒤로가기 버튼
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                color: textDark,
+                size: 22,
+              ),
+            ),
+            // 상대방 이름
+            Expanded(
+              child: Text(
+                otherName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textDark,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+            // 더보기 메뉴
+            PopupMenuButton<_ChatMenuAction>(
+              icon: const Icon(
+                Icons.more_horiz,
+                color: textDark,
+                size: 24,
+              ),
+              onSelected: (action) =>
+                  _handleMenuAction(action, currentUserId, otherUserId),
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: _ChatMenuAction.report,
+                  child: Text('신고하기'),
+                ),
+                PopupMenuItem(
+                  value: _ChatMenuAction.block,
+                  child: Text('차단하기'),
+                ),
+                PopupMenuItem(
+                  value: _ChatMenuAction.leave,
+                  child: Text('채팅방 나가기'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 메뉴 액션 처리
+  Future<void> _handleMenuAction(
+    _ChatMenuAction action,
+    String? currentUserId,
+    String? otherUserId,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final roomId = widget.room.roomId;
+
+    if (currentUserId == null || currentUserId.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('로그인이 필요합니다.')),
+      );
+      return;
+    }
+    if (otherUserId == null || otherUserId.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('상대방 정보를 찾을 수 없습니다.')),
+      );
+      return;
+    }
+
+    if (action == _ChatMenuAction.report) {
+      final reason = await _promptReportReason(context);
+      if (reason == null) return;
+      try {
+        final targetRoomId = roomId ?? '';
+        if (targetRoomId.isEmpty) {
+          throw StateError('채팅방 정보를 찾을 수 없습니다.');
+        }
+        await ReportService().reportItem(
+          reporterUid: currentUserId,
+          targetUid: otherUserId,
+          targetContentId: targetRoomId,
+          reason: reason,
+        );
+        messenger.showSnackBar(
+          const SnackBar(content: Text('신고가 접수되었습니다.')),
+        );
+      } catch (_) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('신고에 실패했어요.')),
+        );
+      }
+      return;
+    }
+
+    if (action == _ChatMenuAction.block) {
+      final confirm = await _confirmAction(
+        context,
+        title: '사용자 차단',
+        message: '이 사용자를 차단하시겠어요?',
+        confirmLabel: '차단',
+      );
+      if (!confirm) return;
+      try {
+        await safety_service.UserService().blockUser(
+          currentUid: currentUserId,
+          targetUid: otherUserId,
+        );
+        messenger.showSnackBar(
+          const SnackBar(content: Text('사용자를 차단했어요.')),
+        );
+        if (mounted) Navigator.pop(context);
+      } catch (_) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('차단에 실패했어요.')),
+        );
+      }
+      return;
+    }
+
+    if (action == _ChatMenuAction.leave) {
+      final confirm = await _confirmAction(
+        context,
+        title: '채팅방 나가기',
+        message: '이 채팅방을 나가시겠어요?',
+        confirmLabel: '나가기',
+      );
+      if (!confirm) return;
+      try {
+        final targetRoomId = roomId ?? '';
+        if (targetRoomId.isEmpty) {
+          throw StateError('채팅방 정보를 찾을 수 없습니다.');
+        }
+        await context.read<ChatService>().leaveChatRoom(targetRoomId);
+        messenger.showSnackBar(
+          const SnackBar(content: Text('채팅방을 나갔어요.')),
+        );
+        if (mounted) Navigator.pop(context);
+      } catch (_) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('채팅방 나가기에 실패했어요.')),
+        );
+      }
+    }
+  }
+
+  /// 상품 정보 바
+  Widget _buildProductInfoBar(Product? product, bool isHiddenForViewer) {
+    return GestureDetector(
+      onTap: () {
+        // 상품이 있고 숨김 처리되지 않은 경우에만 상세 페이지로 이동
+        if (product != null && !isHiddenForViewer) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DetailScreen(product: product),
+            ),
+          );
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: surfaceLight,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: isHiddenForViewer
+            ? Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.lock_outline,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      '숨김 처리된 상품입니다.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: textGrey,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  // 상품 이미지
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: borderColor, width: 1),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: widget.room.productImageUrl.isNotEmpty
+                          ? Image.network(
+                              widget.room.productImageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: Colors.grey[200],
+                                child: const Icon(
+                                  Icons.image_not_supported,
+                                  color: Colors.grey,
+                                  size: 18,
+                                ),
+                              ),
+                            )
+                          : Container(
+                              color: Colors.grey[200],
+                              child: const Icon(
+                                Icons.image,
+                                color: Colors.grey,
+                                size: 18,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // 상품 정보
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.room.productTitle,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: textDark,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatPrice(widget.room.productPrice),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // 상태 배지
+                  if (product != null) _buildStatusBadge(product.status),
+                ],
+              ),
+      ),
+    );
+  }
+
+  /// 상태 배지
+  Widget _buildStatusBadge(ProductStatus status) {
+    final Color backgroundColor;
+    final Color textColor;
+
+    switch (status) {
+      case ProductStatus.forSale:
+        backgroundColor = primaryBlue.withValues(alpha: 0.1);
+        textColor = primaryBlue;
+        break;
+      case ProductStatus.reserved:
+        backgroundColor = const Color(0xFFDCFCE7);
+        textColor = const Color(0xFF15803D);
+        break;
+      case ProductStatus.soldOut:
+        backgroundColor = Colors.grey[200]!;
+        textColor = Colors.grey[600]!;
+        break;
+      case ProductStatus.hidden:
+        backgroundColor = Colors.grey[200]!;
+        textColor = Colors.grey[600]!;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: textColor.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        status.label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+  /// 메시지 영역
+  Widget _buildMessageArea(
+    BuildContext context,
+    String? roomId,
+    String? currentUserId,
+    ImageProvider avatarImage,
+  ) {
+    return StreamBuilder<List<ChatMessage>>(
+      stream: roomId == null || roomId.isEmpty
+          ? Stream<List<ChatMessage>>.empty()
+          : context
+              .read<ChatService>()
+              .getMessages(roomId, limit: _messageLimit),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: primaryBlue,
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text(
+              '메시지를 불러오지 못했어요.',
+              style: TextStyle(color: textGrey),
+            ),
+          );
+        }
+
+        final messages = snapshot.data ?? [];
+        _markLatestAsReadIfNeeded(
+          snapshot: snapshot,
+          messages: messages,
+          currentUserId: currentUserId,
+          roomId: roomId,
+        );
+        _hasMore = messages.length >= _messageLimit;
+
+        if (messages.isEmpty) {
+          return const Center(
+            child: Text(
+              '아직 대화가 없습니다.\n메시지를 보내 대화를 시작해보세요!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: textGrey,
+                fontSize: 14,
+              ),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          controller: _scrollController,
+          reverse: true,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          itemCount: messages.length,
+          itemBuilder: (context, index) {
+            final message = messages[index];
+            final isMe = message.senderId == currentUserId;
+
+            // 날짜 구분선 표시 여부 확인
+            final showDateSeparator = _shouldShowDateSeparator(
+              messages,
+              index,
+            );
+
+            return Column(
+              children: [
+                if (showDateSeparator)
+                  _buildDateSeparator(message.createdAt.toDate()),
+                isMe
+                    ? _buildSentMessage(message)
+                    : _buildReceivedMessage(message, avatarImage),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// 날짜 구분선 표시 여부
+  bool _shouldShowDateSeparator(List<ChatMessage> messages, int index) {
+    if (index == messages.length - 1) return true;
+
+    final currentDate = messages[index].createdAt.toDate();
+    final previousDate = messages[index + 1].createdAt.toDate();
+
+    return currentDate.year != previousDate.year ||
+        currentDate.month != previousDate.month ||
+        currentDate.day != previousDate.day;
+  }
+
+  /// 날짜 구분선
+  Widget _buildDateSeparator(DateTime date) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey[300]?.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            _formatDateSeparator(date),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: textGrey,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 받은 메시지 (왼쪽)
+  Widget _buildReceivedMessage(ChatMessage message, ImageProvider avatarImage) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 프로필 이미지
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: borderColor, width: 1),
+            ),
+            child: ClipOval(
+              child: Image(
+                image: avatarImage,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.person, size: 20, color: Colors.grey),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // 메시지 버블
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: surfaceLight,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4),
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    border: Border.all(
+                      color: borderColor,
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    message.text,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: textDark,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    _formatMessageTime(message.createdAt),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: textGrey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 보낸 메시지 (오른쪽)
+  Widget _buildSentMessage(ChatMessage message) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primaryBlue,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(4),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryBlue.withValues(alpha: 0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    message.text,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Colors.white,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (message.isRead)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 4),
+                          child: Text(
+                            '읽음',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: primaryBlue,
+                            ),
+                          ),
+                        ),
+                      Text(
+                        _formatMessageTime(message.createdAt),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: textGrey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 입력 영역
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      decoration: const BoxDecoration(
+        color: surfaceLight,
+        border: Border(
+          top: BorderSide(color: borderColor, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          // 첨부 버튼
+          IconButton(
+            onPressed: () {
+              // TODO: 이미지 첨부 기능
+            },
+            icon: const Icon(
+              Icons.add_circle_outline,
+              color: textGrey,
+              size: 28,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 12),
+          // 텍스트 입력 필드
+          Expanded(
+            child: Container(
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F2F4),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: TextField(
+                controller: _controller,
+                textAlignVertical: TextAlignVertical.center,
+                decoration: const InputDecoration(
+                  hintText: '메시지를 입력하세요',
+                  hintStyle: TextStyle(
+                    color: textGrey,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  isDense: true,
+                ),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: textDark,
+                ),
+                onSubmitted: (_) => _sendMessage(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 전송 버튼
+          GestureDetector(
+            onTap: _sendMessage,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: primaryBlue,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_upward,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

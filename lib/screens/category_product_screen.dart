@@ -5,15 +5,44 @@ import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import 'detail_screen.dart';
 import '../widgets/product_image.dart';
+import '../constants/categories.dart';
+import '../widgets/dynamic_attribute_form.dart';
 
-class CategoryProductScreen extends StatelessWidget {
+/// 카테고리별 상품 목록 화면
+/// 서브카테고리 탭, 필터 칩, 2열 그리드 레이아웃을 제공합니다.
+class CategoryProductScreen extends StatefulWidget {
   final String category;
 
   const CategoryProductScreen({super.key, required this.category});
 
+  @override
+  State<CategoryProductScreen> createState() => _CategoryProductScreenState();
+}
+
+class _CategoryProductScreenState extends State<CategoryProductScreen> {
+  // 색상 상수
+  static const Color primaryBlue = Color(0xFF3E97EA);
+  static const Color textDark = Color(0xFF111518);
+  static const Color textGrey = Color(0xFF637688);
+  static const Color backgroundLight = Color(0xFFF6F7F8);
+  static const Color surfaceLight = Color(0xFFFFFFFF);
+
+  // 선택된 서브카테고리 인덱스
+  int _selectedSubCategoryIndex = 0;
+  
+  // 적용된 필터 스펙 (Key: Attribute Key, Value: Selected Option)
+  Map<String, dynamic> _filterSpecs = {};
+
+  // 카테고리별 서브카테고리 정의 (상수 파일 사용)
+  // 선택된 탭을 위해 '전체'를 맨 앞에 추가
+  List<String> get _currentSubCategories {
+    final subs = CategoryConstants.getSubCategories(widget.category);
+    return ['전체', ...subs];
+  }
+
   String _formatPrice(int price) {
+    final buffer = StringBuffer();
     final priceString = price.toString();
-    final buffer = StringBuffer('₩ ');
     for (int i = 0; i < priceString.length; i++) {
       if (i > 0 && (priceString.length - i) % 3 == 0) {
         buffer.write(',');
@@ -24,249 +53,568 @@ class CategoryProductScreen extends StatelessWidget {
     return buffer.toString();
   }
 
-  Widget _buildStatusBadge(ProductStatus status) {
-    if (status == ProductStatus.forSale) {
-      return const SizedBox.shrink();
+  String _formatTimeAgo(DateTime createdAt) {
+    final now = DateTime.now();
+    final difference = now.difference(createdAt);
+
+    if (difference.inMinutes < 1) {
+      return '방금 전';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}분 전';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}시간 전';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}일 전';
+    } else {
+      return '${createdAt.month}/${createdAt.day}';
     }
-    final color = status == ProductStatus.reserved ? Colors.green : Colors.grey;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        status.label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEngagementRow(BuildContext context, Product product) {
-    final items = <Widget>[];
-    final chatColor = Theme.of(context).colorScheme.primary;
-
-    if (product.likeCount > 0) {
-      items.add(
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.favorite, size: 14, color: Colors.redAccent),
-            const SizedBox(width: 4),
-            Text(
-              '${product.likeCount}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (product.chatCount > 0) {
-      if (items.isNotEmpty) {
-        items.add(const SizedBox(width: 8));
-      }
-      items.add(
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.chat_bubble_outline, size: 14, color: chatColor),
-            const SizedBox(width: 4),
-            Text(
-              '${product.chatCount}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: items,
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final productService = context.watch<ProductService>();
-    final products = productService.getByCategory(category);
+    final products = productService.getByCategory(widget.category);
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          category,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
+      backgroundColor: backgroundLight,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 헤더 (AppBar 대체)
+            _buildHeader(context),
+            // 서브카테고리 탭
+            _buildSubCategoryTabs(),
+            // 상품 그리드
+            Expanded(
+              child: () {
+                // 로컬 필터링 로직
+                // '전체' 탭(index 0)이 아니면 subCategory가 일치하는 상품만 필터링
+                final allProducts = productService.getByCategory(widget.category);
+                final currentSubTabs = ['전체', ...CategoryConstants.getSubCategories(widget.category)];
+                
+                  final filteredProducts = _selectedSubCategoryIndex == 0
+                      ? allProducts
+                      : allProducts.where((p) {
+                          // 1. 서브카테고리 일치
+                          if (p.subCategory != currentSubTabs[_selectedSubCategoryIndex]) return false;
+                          
+                          // 2. 동적 속성 필터링 (스마트 필터)
+                          for (final entry in _filterSpecs.entries) {
+                            final filterKey = entry.key;
+                            final filterVal = entry.value;
+
+                            if (filterVal == null) continue;
+                            if (filterVal is String && filterVal.isEmpty) continue;
+                            if (filterVal is List && filterVal.isEmpty) continue;
+
+                            final productVal = p.specs[filterKey];
+                            if (productVal == null) return false; // 속성 값 없으면 제외 (엄격)
+
+                            // 2-1. 다중 선택 (List) - OR 연산
+                            if (filterVal is List) {
+                              if (!filterVal.contains(productVal)) return false;
+                            } 
+                            // 2-2. 범위 검색 (Map {'min': '..', 'max': '..'})
+                            else if (filterVal is Map) {
+                              final minStr = filterVal['min'] as String?;
+                              final maxStr = filterVal['max'] as String?;
+                              
+                              try {
+                                // 제품 값을 숫자로 파싱 (cm 등 단위 제거 필요할 수 있음)
+                                String pValStr = productVal.replaceAll(RegExp(r'[^0-9.]'), '');
+                                if (pValStr.isEmpty) return false;
+                                
+                                final pNum = double.parse(pValStr);
+
+                                if (minStr != null && minStr.isNotEmpty) {
+                                  final minNum = double.parse(minStr);
+                                  if (pNum < minNum) return false;
+                                }
+                                if (maxStr != null && maxStr.isNotEmpty) {
+                                  final maxNum = double.parse(maxStr);
+                                  if (pNum > maxNum) return false;
+                                }
+                              } catch (e) {
+                                return false; // 파싱 실패 시 제외
+                              }
+                            }
+                            // 2-3. 단일 값 (String) - 정확 일치
+                            else {
+                              if (productVal != filterVal) return false;
+                            }
+                          }
+                          return true;
+                        }).toList();
+
+                return filteredProducts.isEmpty
+                    ? _buildEmptyState()
+                    : _buildProductGrid(context, filteredProducts, productService);
+              }(),
+            ),
+          ],
         ),
       ),
-      body: products.isEmpty
-          ? const Center(
-              child: Text(
-                '등록된 상품이 없어요',
-                style: TextStyle(
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: products.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final product = products[index];
-                return _buildProductCard(context, product, productService);
-              },
-            ),
     );
   }
 
+  /// 헤더 - 뒤로가기, 타이틀, 필터 버튼
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      color: surfaceLight,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: Row(
+        children: [
+          // 뒤로가기 버튼
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(
+              Icons.arrow_back_ios_new,
+              color: textDark,
+              size: 22,
+            ),
+          ),
+          // 타이틀
+          Expanded(
+            child: Text(
+              widget.category,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: textDark,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ),
+          // 필터 버튼
+          IconButton(
+            onPressed: () => _showFilterBottomSheet(context),
+            icon: const Icon(
+              Icons.tune,
+              color: textDark,
+              size: 24,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 서브카테고리 탭 (가로 스크롤)
+  Widget _buildSubCategoryTabs() {
+    return Container(
+      color: surfaceLight,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: List.generate(_currentSubCategories.length, (index) {
+            final isSelected = _selectedSubCategoryIndex == index;
+            return Padding(
+              padding: const EdgeInsets.only(right: 24),
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _selectedSubCategoryIndex = index;
+                  _filterSpecs.clear(); // 탭 변경 시 필터 초기화
+                }),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        _currentSubCategories[index],
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? primaryBlue : textGrey,
+                        ),
+                      ),
+                    ),
+                    // 선택 인디케이터
+                    Container(
+                      height: 3,
+                      width: 40,
+                      decoration: BoxDecoration(
+                        color: isSelected ? primaryBlue : Colors.transparent,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  /// 빈 상태 표시
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 64,
+            color: textGrey,
+          ),
+          SizedBox(height: 16),
+          Text(
+            '등록된 상품이 없어요',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: textGrey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 상품 그리드 (2열)
+  Widget _buildProductGrid(
+    BuildContext context,
+    List<Product> products,
+    ProductService productService,
+  ) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+        childAspectRatio: 0.55, // 3:4 비율 + 텍스트 영역
+      ),
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        return _buildProductCard(context, products[index], productService);
+      },
+    );
+  }
+
+  /// 상품 카드 UI
   Widget _buildProductCard(
     BuildContext context,
     Product product,
     ProductService productService,
   ) {
     final isLiked = productService.isLiked(product.id);
+    final isReserved = product.status == ProductStatus.reserved;
     final isSoldOut = product.status == ProductStatus.soldOut ||
         product.status == ProductStatus.hidden;
-    final hasEngagement = product.likeCount > 0 || product.chatCount > 0;
 
-    return Opacity(
-      opacity: isSoldOut ? 0.5 : 1,
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DetailScreen(product: product),
-              ),
-            );
-          },
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade200),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    width: 86,
-                    height: 86,
-                    color: Colors.grey.shade200,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: buildProductImage(
-                            product,
-                            fit: BoxFit.cover,
-                            errorIconSize: 28,
-                            loadingWidget: const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DetailScreen(product: product),
+          ),
+        );
+      },
+      child: Opacity(
+        opacity: isSoldOut ? 0.5 : 1,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 이미지 영역
+            Expanded(
+              child: Stack(
+                children: [
+                  // 상품 이미지
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        color: Colors.grey[100],
+                        child: buildProductImage(
+                          product,
+                          fit: BoxFit.cover,
+                          errorIconSize: 32,
+                          loadingWidget: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ),
-                        if (product.status != ProductStatus.forSale)
-                          Positioned(
-                            top: 6,
-                            left: 6,
-                            child: _buildStatusBadge(product.status),
-                          ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: Text(
-                              product.title,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: () {
-                              final currentUser =
-                                  context.read<UserService>().currentUser;
-                              if (currentUser == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('로그인이 필요합니다.'),
-                                  ),
-                                );
-                                return;
-                              }
-                              productService.toggleLike(
-                                product.id,
-                                currentUser.uid,
-                              );
-                            },
-                            icon: Icon(
-                              isLiked
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color: isLiked ? Colors.red : Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _formatPrice(product.price),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
+                  // 좋아요 버튼
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () {
+                        final currentUser =
+                            context.read<UserService>().currentUser;
+                        if (currentUser == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('로그인이 필요합니다.')),
+                          );
+                          return;
+                        }
+                        productService.toggleLike(product.id, currentUser.uid);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          size: 18,
+                          color: isLiked ? Colors.redAccent : Colors.white,
                         ),
                       ),
-                      if (hasEngagement) const SizedBox(height: 6),
-                      if (hasEngagement)
-                        _buildEngagementRow(context, product),
-                    ],
+                    ),
+                  ),
+                  // 예약중 오버레이
+                  if (isReserved)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          child: Center(
+                            child: Transform.rotate(
+                              angle: -0.2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  '예약중',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            // 상품 정보
+            Text(
+              product.title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: textDark,
+                height: 1.2,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${product.sellerName.isNotEmpty ? product.sellerName : '판매자'} · ${_formatTimeAgo(product.createdAt)}',
+              style: const TextStyle(
+                fontSize: 11,
+                color: textGrey,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              _formatPrice(product.price),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: textDark,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 필터 바텀 시트 표시
+  void _showFilterBottomSheet(BuildContext context) async {
+    final subCategory = _currentSubCategories[_selectedSubCategoryIndex];
+    
+    // '전체' 탭에서는 상세 필터 미지원
+    if (subCategory == '전체') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('상세 분류를 선택하면 필터를 사용할 수 있습니다.')),
+      );
+      return;
+    }
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FilterBottomSheet(
+        category: widget.category,
+        subCategory: subCategory,
+        initialSpecs: _filterSpecs,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _filterSpecs = result;
+      });
+    }
+  }
+}
+
+/// 필터 바텀 시트 위젯
+class _FilterBottomSheet extends StatefulWidget {
+  final String category;
+  final String subCategory;
+  final Map<String, dynamic> initialSpecs;
+
+  const _FilterBottomSheet({
+    required this.category,
+    required this.subCategory,
+    required this.initialSpecs,
+  });
+
+  @override
+  State<_FilterBottomSheet> createState() => _FilterBottomSheetState();
+}
+
+class _FilterBottomSheetState extends State<_FilterBottomSheet> {
+  static const Color primaryBlue = Color(0xFF3E97EA);
+  static const Color textDark = Color(0xFF111518);
+  static const Color textGrey = Color(0xFF637688);
+
+  // 로컬 필터 상태
+  late final Map<String, dynamic> _selectedSpecs;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSpecs = Map.from(widget.initialSpecs);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.7,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          // 핸들
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 48,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          // 헤더
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '상세 필터',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: textDark,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: _resetFilters,
+                  child: const Text(
+                    '초기화',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: textGrey,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+          const Divider(height: 1),
+          // 필터 컨텐츠
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: DynamicAttributeForm(
+                category: widget.category,
+                subCategory: widget.subCategory,
+                selectedSpecs: _selectedSpecs,
+                isFilterMode: true, // 상세 필터 모드 활성화 (다중 선택/범위 입력)
+                onSpecChanged: (key, value) {
+                  setState(() {
+                    _selectedSpecs[key] = value;
+                  });
+                },
+              ),
+            ),
+          ),
+          // 적용 버튼
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            child: SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context, _selectedSpecs),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 4,
+                ),
+                child: const Text(
+                  '적용하기',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// 필터 초기화
+  void _resetFilters() {
+    setState(() {
+      _selectedSpecs.clear();
+    });
   }
 }

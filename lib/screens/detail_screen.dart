@@ -29,6 +29,27 @@ class DetailScreen extends StatefulWidget {
 
 class _DetailScreenState extends State<DetailScreen> {
   ProductStatus? _overrideStatus;
+  final PageController _imagePageController = PageController();
+  int _currentImageIndex = 0;
+
+  @override
+  void dispose() {
+    _imagePageController.dispose();
+    super.dispose();
+  }
+
+  /// 전체화면 이미지 뷰어 열기
+  void _openFullScreenImage(BuildContext context, Product product, int initialIndex) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _FullScreenImageViewer(
+          imageUrls: product.imageUrls.isNotEmpty ? product.imageUrls : [product.imageUrl],
+          initialIndex: initialIndex,
+        ),
+      ),
+    );
+  }
 
   Future<String?> _promptReportReason(BuildContext context) async {
     String reason = '';
@@ -230,7 +251,7 @@ class _DetailScreenState extends State<DetailScreen> {
         ],
         if (hasLike && hasChat) const SizedBox(width: 12),
         if (hasChat) ...[
-          Icon(Icons.chat_bubble_outline, size: 16, color: chatColor),
+          Icon(Icons.forum_rounded, size: 16, color: chatColor),
           const SizedBox(width: 6),
           Text(
             '${product.chatCount}',
@@ -334,30 +355,94 @@ class _DetailScreenState extends State<DetailScreen> {
               children: [
                 Stack(
                   children: [
+                    // 다중 이미지 슬라이더
                     AspectRatio(
                       aspectRatio: 4 / 5,
-                      child: buildProductImage(
-                        currentProduct,
-                        fit: BoxFit.cover,
-                        errorIconSize: 80,
-                        loadingWidget: const Center(
-                          child: CircularProgressIndicator(),
+                      child: currentProduct.imageUrls.isEmpty
+                          ? GestureDetector(
+                              onTap: () => _openFullScreenImage(context, currentProduct, 0),
+                              child: buildProductImage(
+                                currentProduct,
+                                fit: BoxFit.cover,
+                                errorIconSize: 80,
+                                loadingWidget: const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                            )
+                          : PageView.builder(
+                              controller: _imagePageController,
+                              itemCount: currentProduct.imageUrls.length,
+                              onPageChanged: (index) {
+                                setState(() => _currentImageIndex = index);
+                              },
+                              itemBuilder: (context, index) {
+                                return GestureDetector(
+                                  onTap: () => _openFullScreenImage(context, currentProduct, index),
+                                  child: Image.network(
+                                    currentProduct.imageUrls[index],
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      color: Colors.grey[200],
+                                      child: const Icon(
+                                        Icons.image_not_supported,
+                                        size: 80,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    loadingBuilder: (context, child, progress) {
+                                      if (progress == null) return child;
+                                      return const Center(
+                                        child: CircularProgressIndicator(),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    // 이미지 인디케이터 (2개 이상일 때만 표시)
+                    if (currentProduct.imageUrls.length > 1)
+                      Positioned(
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              currentProduct.imageUrls.length,
+                              (index) => Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                width: index == _currentImageIndex ? 20 : 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: index == _currentImageIndex
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    // Gradient 오버레이 - IgnorePointer로 터치 통과
                     Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withOpacity(0.55),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.white,
-                            ],
-                            stops: const [0, 0.25, 0.7, 1],
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.55),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Colors.white,
+                              ],
+                              stops: const [0, 0.25, 0.7, 1],
+                            ),
                           ),
                         ),
                       ),
@@ -1073,12 +1158,135 @@ class _DetailScreenState extends State<DetailScreen> {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.25),
+        color: Colors.white.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Icon(
         icon,
         color: Colors.white,
+      ),
+    );
+  }
+}
+
+/// 전체화면 이미지 뷰어
+class _FullScreenImageViewer extends StatefulWidget {
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  const _FullScreenImageViewer({
+    required this.imageUrls,
+    this.initialIndex = 0,
+  });
+
+  @override
+  State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // 이미지 슬라이더
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.imageUrls.length,
+            onPageChanged: (index) {
+              setState(() => _currentIndex = index);
+            },
+            itemBuilder: (context, index) {
+              final url = widget.imageUrls[index];
+              if (url.isEmpty) {
+                return const Center(
+                  child: Icon(Icons.image_not_supported, size: 80, color: Colors.grey),
+                );
+              }
+              return InteractiveViewer(
+                minScale: 1.0,
+                maxScale: 4.0,
+                child: Center(
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.image_not_supported,
+                      size: 80,
+                      color: Colors.grey,
+                    ),
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          // 닫기 버튼
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 16,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, color: Colors.white, size: 24),
+              ),
+            ),
+          ),
+          // 페이지 인디케이터
+          if (widget.imageUrls.length > 1)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom + 24,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '${_currentIndex + 1} / ${widget.imageUrls.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

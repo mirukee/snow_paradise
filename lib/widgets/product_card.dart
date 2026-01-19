@@ -42,8 +42,8 @@ class ProductCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AspectRatio(
-                aspectRatio: 4 / 5,
+              // 이미지 영역 - Expanded로 남은 공간 채우기
+              Expanded(
                 child: Stack(
                   children: [
                     Positioned.fill(
@@ -74,7 +74,7 @@ class ProductCard extends StatelessWidget {
                       top: 6,
                       right: 6,
                       child: Material(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
@@ -155,7 +155,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF101922).withOpacity(0.7),
+        color: const Color(0xFF101922).withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(

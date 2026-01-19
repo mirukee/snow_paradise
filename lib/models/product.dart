@@ -69,8 +69,12 @@ class Product {
   final String category;
   final List<String> keywords;
   final String condition;
-  final String imageUrl;
-  final String? localImagePath;
+  final String subCategory;
+  final Map<String, String> specs; // 상세 스펙 (동적 속성) // 소분류 추가
+  /// 여러 이미지 URL 목록 (최대 10개)
+  final List<String> imageUrls;
+  /// 로컬 이미지 경로 목록 (업로드 전)
+  final List<String> localImagePaths;
   final String description;
   final String size;
   final String year;
@@ -81,6 +85,12 @@ class Product {
   final int likeCount;
   final int chatCount;
 
+  /// 대표 이미지 URL (첫 번째 이미지, 하위 호환용)
+  String get imageUrl => imageUrls.isNotEmpty ? imageUrls.first : '';
+  
+  /// 로컬 대표 이미지 경로 (하위 호환용)
+  String? get localImagePath => localImagePaths.isNotEmpty ? localImagePaths.first : null;
+
   Product({
     required this.id,
     this.docId,
@@ -89,20 +99,32 @@ class Product {
     required this.price,
     required this.brand,
     this.category = '기타',
+    this.subCategory = '',
+    this.specs = const {}, // 기본값
     this.keywords = const [],
     required this.condition,
-    required this.imageUrl,
-    this.localImagePath,
+    // 단일 imageUrl 지원 (하위 호환)
+    String? imageUrl,
+    List<String>? imageUrls,
+    // 단일 localImagePath 지원 (하위 호환)
+    String? localImagePath,
+    List<String>? localImagePaths,
     required this.description,
     required this.size,
     required this.year,
     required this.sellerName,
     required this.sellerProfile,
-    this.sellerId = '',
+    required this.sellerId,
     this.status = ProductStatus.forSale,
     this.likeCount = 0,
     this.chatCount = 0,
-  }) : createdAt = createdAt ?? DateTime.now();
+  }) : createdAt = createdAt ?? DateTime.now(),
+       // imageUrls 처리: 전달된 리스트 우선, 없으면 단일 URL로 리스트 생성
+       imageUrls = imageUrls ?? 
+           (imageUrl != null && imageUrl.isNotEmpty ? [imageUrl] : []),
+       // localImagePaths 처리: 전달된 리스트 우선, 없으면 단일 경로로 리스트 생성
+       localImagePaths = localImagePaths ?? 
+           (localImagePath != null && localImagePath.isNotEmpty ? [localImagePath] : []);
 
   factory Product.fromJson(Map<String, dynamic> json, {String? docId}) {
     int parseCount(dynamic value) {
@@ -127,6 +149,20 @@ class Product {
             .toList()
         : <String>[];
 
+    // imageUrls 파싱 (배열 또는 단일 문자열 지원)
+    List<String> imageUrls = [];
+    final rawImageUrls = json['imageUrls'];
+    final rawImageUrl = json['imageUrl'];
+    
+    if (rawImageUrls is Iterable) {
+      imageUrls = rawImageUrls
+          .map((url) => url.toString().trim())
+          .where((url) => url.isNotEmpty)
+          .toList();
+    } else if (rawImageUrl != null && rawImageUrl.toString().trim().isNotEmpty) {
+      imageUrls = [rawImageUrl.toString().trim()];
+    }
+
     return Product(
       id: json['id']?.toString() ?? docId ?? '',
       docId: docId,
@@ -135,10 +171,11 @@ class Product {
       price: rawPrice is num ? rawPrice.toInt() : 0,
       brand: json['brand']?.toString() ?? '',
       category: json['category']?.toString() ?? '기타',
+      subCategory: json['subCategory']?.toString() ?? '', // JSON 파싱 추가
+      specs: Map<String, String>.from(json['specs'] ?? {}), // JSON 파싱 추가
       keywords: keywords,
       condition: json['condition']?.toString() ?? '',
-      imageUrl: json['imageUrl']?.toString() ?? '',
-      localImagePath: json['localImagePath']?.toString(),
+      imageUrls: imageUrls,
       description: json['description']?.toString() ?? '',
       size: json['size']?.toString() ?? '',
       year: json['year']?.toString() ?? '',
@@ -159,9 +196,12 @@ class Product {
       'price': price,
       'brand': brand,
       'category': category,
+      'subCategory': subCategory,
+      'specs': specs, // JSON 변환 추가
       'keywords': keywords,
       'condition': condition,
-      'imageUrl': imageUrl,
+      'imageUrls': imageUrls,
+      'imageUrl': imageUrl, // 하위 호환용
       'description': description,
       'size': size,
       'year': year,

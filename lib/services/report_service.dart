@@ -31,7 +31,47 @@ class ReportService {
       'targetUid': trimmedTarget,
       'targetContentId': trimmedContentId,
       'reason': trimmedReason,
+      'status': 'pending', // 신고 상태: pending, resolved
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// 신고 상태 업데이트 (pending → resolved)
+  Future<void> updateReportStatus(String reportId, String status) async {
+    final trimmedId = reportId.trim();
+    if (trimmedId.isEmpty) {
+      throw StateError('신고 ID가 유효하지 않습니다.');
+    }
+
+    final validStatuses = ['pending', 'resolved'];
+    if (!validStatuses.contains(status)) {
+      throw StateError('유효하지 않은 상태값입니다.');
+    }
+
+    await _firestore.collection('reports').doc(trimmedId).update({
+      'status': status,
+      'resolvedAt': status == 'resolved' ? FieldValue.serverTimestamp() : null,
+    });
+  }
+
+  /// 신고 삭제
+  Future<void> deleteReport(String reportId) async {
+    final trimmedId = reportId.trim();
+    if (trimmedId.isEmpty) {
+      throw StateError('신고 ID가 유효하지 않습니다.');
+    }
+
+    await _firestore.collection('reports').doc(trimmedId).delete();
+  }
+
+  /// 신고 목록 스트림 (상태 필터 지원)
+  Stream<QuerySnapshot> getReportsStream({String? statusFilter}) {
+    Query query = _firestore.collection('reports');
+    
+    if (statusFilter != null && statusFilter.isNotEmpty) {
+      query = query.where('status', isEqualTo: statusFilter);
+    }
+    
+    return query.orderBy('createdAt', descending: true).snapshots();
   }
 }

@@ -1,0 +1,37 @@
+{
+  "output": {
+    "style": "xml",
+    "filePath": "repomix-output.xml",
+    "removeComments": false,
+    "removeEmptyLines": true
+  },
+  "include": [
+    "**/*" 
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "customPatterns": [
+      "**/*.lock",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.jpeg",
+      "**/*.gif",
+      "**/*.svg",
+      "**/*.ico",
+      "**/*.ttf",
+      "**/*.otf",
+      "**/*.pdf",
+      "build/**",
+      ".dart_tool/**",
+      ".idea/**",
+      ".vscode/**",
+      "ios/Pods/**",
+      "ios/.symlinks/**",
+      "ios/Flutter/Flutter.framework/**",
+      "ios/Flutter/App.framework/**",
+      "android/.gradle/**",
+      "functions/node_modules/**",
+      "functions/lib/**" 
+    ]
+  }
+}

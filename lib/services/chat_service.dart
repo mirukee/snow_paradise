@@ -79,6 +79,8 @@ class ChatService {
       'unreadCountSeller': 0,
       'lastMessage': '',
       'lastMessageTime': Timestamp.now(),
+      'lastReadAtBuyer': Timestamp.now(),
+      'lastReadAtSeller': Timestamp.fromMillisecondsSinceEpoch(0),
       'isFirstMessageSent': false, // 첫 메시지 전송 시 true로 변경되며 chatCount 증가
     };
     final roomDoc = await _firestore.collection('chat_rooms').add(roomData);
@@ -90,7 +92,7 @@ class ChatService {
     });
   }
 
-  Stream<List<ChatRoom>> getChatRooms() {
+  Stream<List<ChatRoom>> getChatRooms({int? limit}) {
     final userId = _requireUser().uid;
     final controller = StreamController<List<ChatRoom>>();
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? roomsSubscription;
@@ -117,11 +119,14 @@ class ChatService {
     }
 
     controller.onListen = () {
-      roomsSubscription = _firestore
+      Query<Map<String, dynamic>> query = _firestore
           .collection('chat_rooms')
           .where('participants', arrayContains: userId)
-          .snapshots()
-          .listen((snapshot) {
+          .orderBy('lastMessageTime', descending: true);
+      if (limit != null && limit > 0) {
+        query = query.limit(limit);
+      }
+      roomsSubscription = query.snapshots().listen((snapshot) {
         latestRooms = snapshot.docs.map((doc) {
           final data = doc.data();
           return ChatRoom.fromJson({
@@ -216,6 +221,27 @@ class ChatService {
     });
   }
 
+  Stream<ChatRoom?> watchChatRoom(String roomId) {
+    final trimmedRoomId = roomId.trim();
+    if (trimmedRoomId.isEmpty) {
+      return Stream.value(null);
+    }
+    return _firestore
+        .collection('chat_rooms')
+        .doc(trimmedRoomId)
+        .snapshots()
+        .map((snapshot) {
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        return null;
+      }
+      return ChatRoom.fromJson({
+        ...data,
+        'roomId': snapshot.id,
+      });
+    });
+  }
+
   Future<void> sendMessage(String roomId, String text) async {
     final userId = _requireUser().uid;
     final trimmedText = text.trim();
@@ -238,6 +264,12 @@ class ChatService {
     } else if (isBuyer) {
       targetUnreadField = 'unreadCountSeller';
     }
+    String? senderLastReadField;
+    if (isSeller) {
+      senderLastReadField = 'lastReadAtSeller';
+    } else if (isBuyer) {
+      senderLastReadField = 'lastReadAtBuyer';
+    }
 
     final messageRef = roomRef.collection('messages').doc();
     final batch = _firestore.batch();
@@ -254,6 +286,9 @@ class ChatService {
     };
     if (targetUnreadField != null) {
       updates[targetUnreadField] = FieldValue.increment(1);
+    }
+    if (senderLastReadField != null) {
+      updates[senderLastReadField] = now;
     }
 
     // 첫 메시지 전송 시 chatCount 증가 처리
@@ -317,42 +352,18 @@ class ChatService {
     if (unreadField != null) {
       updates[unreadField] = 0;
     }
+    String? lastReadAtField;
+    if (sellerId == userId) {
+      lastReadAtField = 'lastReadAtSeller';
+    } else if (buyerId == userId) {
+      lastReadAtField = 'lastReadAtBuyer';
+    }
+    if (lastReadAtField != null) {
+      updates[lastReadAtField] = Timestamp.now();
+    }
     if (updates.isNotEmpty) {
       await roomRef.update(updates);
     }
-
-    final unreadSnapshot = await roomRef
-        .collection('messages')
-        .where('isRead', isEqualTo: false)
-        .get();
-
-    if (unreadSnapshot.docs.isEmpty) {
-      return;
-    }
-
-    var batch = _firestore.batch();
-    var pending = 0;
-    Future<void> commitBatch() async {
-      if (pending == 0) {
-        return;
-      }
-      await batch.commit();
-      batch = _firestore.batch();
-      pending = 0;
-    }
-
-    for (final doc in unreadSnapshot.docs) {
-      final senderId = doc.data()['senderId']?.toString();
-      if (senderId == null || senderId == userId) {
-        continue;
-      }
-      batch.update(doc.reference, {'isRead': true});
-      pending += 1;
-      if (pending >= 450) {
-        await commitBatch();
-      }
-    }
-    await commitBatch();
   }
 
   Stream<Set<String>> _blockedUsersStream(String uid) {

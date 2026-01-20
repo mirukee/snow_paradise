@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -43,6 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
   int _messageLimit = 30;
   bool _isFetchingMore = false;
   bool _hasMore = true;
+  Timer? _markAsReadDebounce;
 
   Future<String?> _promptReportReason(BuildContext context) async {
     String reason = '';
@@ -113,17 +116,11 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final roomId = widget.room.roomId;
-      if (roomId == null || roomId.isEmpty) {
-        return;
-      }
-      context.read<ChatService>().markAsRead(roomId);
-    });
   }
 
   @override
   void dispose() {
+    _markAsReadDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _controller.dispose();
@@ -151,6 +148,8 @@ class _ChatScreenState extends State<ChatScreen> {
     required List<ChatMessage> messages,
     required String? currentUserId,
     required String? roomId,
+    required Timestamp? lastReadAt,
+    required int? unreadCount,
   }) {
     if (!snapshot.hasData || messages.isEmpty) {
       return;
@@ -160,13 +159,19 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     final latestMessage = messages.first;
     final isFromOther = latestMessage.senderId != currentUserId;
-    if (!isFromOther || latestMessage.isRead) {
+    if (!isFromOther) {
+      return;
+    }
+    final hasUnread = unreadCount != null && unreadCount > 0;
+    final hasNewerThanLastReadAt = lastReadAt == null ||
+        lastReadAt.compareTo(latestMessage.createdAt) < 0;
+    if (!hasUnread && !hasNewerThanLastReadAt) {
       return;
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<ChatService>().markAsRead(roomId);
+      _scheduleMarkAsRead(roomId);
     });
   }
 
@@ -248,6 +253,38 @@ class _ChatScreenState extends State<ChatScreen> {
     return isSeller ? widget.room.buyerId : widget.room.sellerId;
   }
 
+  Timestamp? _resolveMyLastReadAt(ChatRoom? room, String? currentUserId) {
+    if (room == null || currentUserId == null || currentUserId.isEmpty) {
+      return null;
+    }
+    final isSeller = room.sellerId == currentUserId;
+    return isSeller ? room.lastReadAtSeller : room.lastReadAtBuyer;
+  }
+
+  Timestamp? _resolveOtherLastReadAt(ChatRoom? room, String? currentUserId) {
+    if (room == null || currentUserId == null || currentUserId.isEmpty) {
+      return null;
+    }
+    final isSeller = room.sellerId == currentUserId;
+    return isSeller ? room.lastReadAtBuyer : room.lastReadAtSeller;
+  }
+
+  int? _resolveMyUnreadCount(ChatRoom? room, String? currentUserId) {
+    if (room == null || currentUserId == null || currentUserId.isEmpty) {
+      return null;
+    }
+    final isSeller = room.sellerId == currentUserId;
+    return isSeller ? room.unreadCountSeller : room.unreadCountBuyer;
+  }
+
+  void _scheduleMarkAsRead(String roomId) {
+    _markAsReadDebounce?.cancel();
+    _markAsReadDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      context.read<ChatService>().markAsRead(roomId);
+    });
+  }
+
   ImageProvider _resolveProfileImage(UserModel? userModel) {
     final profileImageUrl = userModel?.profileImageUrl?.trim();
     if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
@@ -261,11 +298,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final currentUserId = context.watch<UserService>().currentUser?.uid;
     final otherUserId = _resolveOtherUserId(currentUserId);
     final roomId = widget.room.roomId;
+    final chatService = context.read<ChatService>();
     final productService = context.watch<ProductService>();
-    final product = productService.getProductById(widget.room.productId);
-    final isHiddenForViewer = product?.status == ProductStatus.hidden &&
-        currentUserId != null &&
-        widget.room.sellerId != currentUserId;
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: otherUserId == null || otherUserId.isEmpty
@@ -281,29 +315,48 @@ class _ChatScreenState extends State<ChatScreen> {
             _resolveOtherName(currentUserId, userModel: otherUser);
         final avatarImage = _resolveProfileImage(otherUser);
 
-        return Scaffold(
-          backgroundColor: backgroundChat,
-          body: SafeArea(
-            child: Column(
-              children: [
-                // 헤더
-                _buildHeader(context, otherName, currentUserId, otherUserId),
-                // 상품 정보 바
-                _buildProductInfoBar(product, isHiddenForViewer),
-                // 메시지 영역
-                Expanded(
-                  child: _buildMessageArea(
-                    context,
-                    roomId,
-                    currentUserId,
-                    avatarImage,
-                  ),
+        return StreamBuilder<ChatRoom?>(
+          stream: roomId == null || roomId.isEmpty
+              ? Stream<ChatRoom?>.value(widget.room)
+              : chatService.watchChatRoom(roomId),
+          builder: (context, roomSnapshot) {
+            final room = roomSnapshot.data ?? widget.room;
+            final product = productService.getProductById(room.productId);
+            final isHiddenForViewer = product?.status == ProductStatus.hidden &&
+                currentUserId != null &&
+                room.sellerId != currentUserId;
+
+            return Scaffold(
+              backgroundColor: backgroundChat,
+              body: SafeArea(
+                child: Column(
+                  children: [
+                    // 헤더
+                    _buildHeader(
+                      context,
+                      otherName,
+                      currentUserId,
+                      otherUserId,
+                    ),
+                    // 상품 정보 바
+                    _buildProductInfoBar(product, isHiddenForViewer),
+                    // 메시지 영역
+                    Expanded(
+                      child: _buildMessageArea(
+                        context,
+                        roomId,
+                        currentUserId,
+                        avatarImage,
+                        room,
+                      ),
+                    ),
+                    // 입력 영역
+                    _buildInputArea(),
+                  ],
                 ),
-                // 입력 영역
-                _buildInputArea(),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -655,6 +708,7 @@ class _ChatScreenState extends State<ChatScreen> {
     String? roomId,
     String? currentUserId,
     ImageProvider avatarImage,
+    ChatRoom? room,
   ) {
     return StreamBuilder<List<ChatMessage>>(
       stream: roomId == null || roomId.isEmpty
@@ -681,11 +735,16 @@ class _ChatScreenState extends State<ChatScreen> {
         }
 
         final messages = snapshot.data ?? [];
+        final myLastReadAt = _resolveMyLastReadAt(room, currentUserId);
+        final otherLastReadAt = _resolveOtherLastReadAt(room, currentUserId);
+        final myUnreadCount = _resolveMyUnreadCount(room, currentUserId);
         _markLatestAsReadIfNeeded(
           snapshot: snapshot,
           messages: messages,
           currentUserId: currentUserId,
           roomId: roomId,
+          lastReadAt: myLastReadAt,
+          unreadCount: myUnreadCount,
         );
         _hasMore = messages.length >= _messageLimit;
 
@@ -710,6 +769,11 @@ class _ChatScreenState extends State<ChatScreen> {
           itemBuilder: (context, index) {
             final message = messages[index];
             final isMe = message.senderId == currentUserId;
+            final isLatestMessage = index == 0;
+            final showReadIndicator = isMe &&
+                isLatestMessage &&
+                otherLastReadAt != null &&
+                otherLastReadAt.compareTo(message.createdAt) >= 0;
 
             // 날짜 구분선 표시 여부 확인
             final showDateSeparator = _shouldShowDateSeparator(
@@ -722,7 +786,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (showDateSeparator)
                   _buildDateSeparator(message.createdAt.toDate()),
                 isMe
-                    ? _buildSentMessage(message)
+                    ? _buildSentMessage(
+                        message,
+                        showReadIndicator: showReadIndicator,
+                      )
                     : _buildReceivedMessage(message, avatarImage),
               ],
             );
@@ -854,7 +921,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// 보낸 메시지 (오른쪽)
-  Widget _buildSentMessage(ChatMessage message) {
+  Widget _buildSentMessage(
+    ChatMessage message, {
+    required bool showReadIndicator,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -901,7 +971,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (message.isRead)
+                      if (showReadIndicator)
                         const Padding(
                           padding: EdgeInsets.only(right: 4),
                           child: Text(

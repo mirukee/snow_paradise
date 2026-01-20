@@ -25,6 +25,8 @@ class ChatRoom {
   final int unreadCountSeller;
   final String lastMessage;
   final Timestamp lastMessageTime;
+  final Timestamp lastReadAtBuyer;
+  final Timestamp lastReadAtSeller;
 
   ChatRoom({
     this.roomId,
@@ -41,6 +43,8 @@ class ChatRoom {
     required this.unreadCountSeller,
     required this.lastMessage,
     required this.lastMessageTime,
+    required this.lastReadAtBuyer,
+    required this.lastReadAtSeller,
   });
 
   factory ChatRoom.fromJson(Map<String, dynamic> json) {
@@ -68,6 +72,8 @@ class ChatRoom {
           : int.tryParse(json['unreadCountSeller']?.toString() ?? '') ?? 0,
       lastMessage: json['lastMessage']?.toString() ?? '',
       lastMessageTime: _timestampFrom(json['lastMessageTime']),
+      lastReadAtBuyer: _timestampFrom(json['lastReadAtBuyer']),
+      lastReadAtSeller: _timestampFrom(json['lastReadAtSeller']),
     );
   }
 
@@ -86,6 +92,8 @@ class ChatRoom {
       'unreadCountSeller': unreadCountSeller,
       'lastMessage': lastMessage,
       'lastMessageTime': lastMessageTime,
+      'lastReadAtBuyer': lastReadAtBuyer,
+      'lastReadAtSeller': lastReadAtSeller,
     };
 
     if (roomId != null && roomId!.isNotEmpty) {

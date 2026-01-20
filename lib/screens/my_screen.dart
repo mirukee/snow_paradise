@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../models/product.dart';
 import '../models/user_model.dart';
+import '../providers/main_tab_provider.dart';
 import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../widgets/product_image.dart';
@@ -35,6 +36,36 @@ class MyScreen extends StatefulWidget {
 
 class _MyScreenState extends State<MyScreen> {
   _SalesTab _selectedTab = _SalesTab.selling;
+
+  Stream<List<Product>> _sellerProductsStream(String uid) {
+    final trimmedUid = uid.trim();
+    if (trimmedUid.isEmpty) {
+      return Stream.value(const <Product>[]);
+    }
+    return FirebaseFirestore.instance
+        .collection('products')
+        .where('sellerId', isEqualTo: trimmedUid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => Product.fromJson(doc.data(), docId: doc.id))
+              .toList(),
+        );
+  }
+
+  Stream<int> _likedCountStream(String uid) {
+    final trimmedUid = uid.trim();
+    if (trimmedUid.isEmpty) {
+      return Stream.value(0);
+    }
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(trimmedUid)
+        .collection('likes')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
 
   String _formatPrice(int price) {
     final priceString = price.toString();
@@ -336,34 +367,17 @@ class _MyScreenState extends State<MyScreen> {
   // 2. 로그인 했을 때 보이는 화면 (User View)
   // ==========================================
   Widget _buildUserView(BuildContext context, User user) {
-    final productService = context.watch<ProductService>();
-    final userProducts = productService.productList
-        .where((product) => product.sellerId == user.uid)
-        .toList();
-    final sellingProducts = userProducts
-        .where(
-          (product) =>
-              product.status == ProductStatus.forSale ||
-              product.status == ProductStatus.reserved,
-        )
-        .toList();
-    final completedProducts = userProducts
-        .where((product) => product.status == ProductStatus.soldOut)
-        .toList();
-    final hiddenProducts = userProducts
-        .where((product) => product.status == ProductStatus.hidden)
-        .toList();
-    final likedCount = productService.likedProducts.length;
-
-    final selectedProducts = _selectedTab == _SalesTab.completed
-        ? completedProducts
-        : _selectedTab == _SalesTab.hidden
-            ? hiddenProducts
-            : sellingProducts;
+    final isActiveTab =
+        context.watch<MainTabProvider>().currentIndex == 4;
+    final userStream = isActiveTab
+        ? FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .snapshots()
+        : Stream<DocumentSnapshot<Map<String, dynamic>>>.empty();
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream:
-          FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      stream: userStream,
       builder: (context, snapshot) {
         final data = snapshot.data?.data();
         final userModel = data == null ? null : UserModel.fromJson(data);
@@ -375,121 +389,170 @@ class _MyScreenState extends State<MyScreen> {
             (profileImageUrl != null && profileImageUrl.isNotEmpty)
                 ? NetworkImage(profileImageUrl)
                 : const AssetImage('assets/images/user_default.png');
+        return StreamBuilder<List<Product>>(
+          stream: isActiveTab
+              ? _sellerProductsStream(user.uid)
+              : Stream<List<Product>>.empty(),
+          builder: (context, productsSnapshot) {
+            final userProducts = productsSnapshot.data ?? [];
+            final isLoadingProducts =
+                productsSnapshot.connectionState == ConnectionState.waiting;
+            final sellingProducts = userProducts
+                .where(
+                  (product) =>
+                      product.status == ProductStatus.forSale ||
+                      product.status == ProductStatus.reserved,
+                )
+                .toList();
+            final completedProducts = userProducts
+                .where((product) => product.status == ProductStatus.soldOut)
+                .toList();
+            final hiddenProducts = userProducts
+                .where((product) => product.status == ProductStatus.hidden)
+                .toList();
 
-        return Scaffold(
-          backgroundColor: _pageBackground,
-          appBar: AppBar(
-            title: const Text(
-              '마이페이지',
-              style: TextStyle(fontWeight: FontWeight.bold, color: _deepNavy),
-            ),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            surfaceTintColor: Colors.transparent,
-            centerTitle: false,
-            flexibleSpace: ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: Container(
-                  color: Colors.white.withOpacity(0.9),
-                ),
-              ),
-            ),
-            actions: [
-              IconButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SettingsScreen(),
+            final selectedProducts = _selectedTab == _SalesTab.completed
+                ? completedProducts
+                : _selectedTab == _SalesTab.hidden
+                    ? hiddenProducts
+                    : sellingProducts;
+
+            return StreamBuilder<int>(
+              stream: isActiveTab
+                  ? _likedCountStream(user.uid)
+                  : Stream<int>.empty(),
+              builder: (context, likedSnapshot) {
+                final likedCount = likedSnapshot.data ?? 0;
+                return Scaffold(
+                  backgroundColor: _pageBackground,
+                  appBar: AppBar(
+                    title: const Text(
+                      '마이페이지',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _deepNavy,
+                      ),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.settings, color: _deepNavy),
-              ),
-            ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: _borderLight),
-            ),
-          ),
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildProfileHeader(
-                  context,
-                  displayName: displayName,
-                  avatarImage: avatarImage,
-                ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildDashboardCard(
-                          context,
-                          icon: Icons.favorite,
-                          label: '관심목록',
-                          count: likedCount,
-                          iconColor: const Color(0xFFE74C3C),
-                          iconBackground: const Color(0xFFFFF1F1),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const LikeListScreen(),
-                              ),
-                            );
-                          },
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    scrolledUnderElevation: 0,
+                    surfaceTintColor: Colors.transparent,
+                    centerTitle: false,
+                    flexibleSpace: ClipRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Container(
+                          color: Colors.white.withOpacity(0.9),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildDashboardCard(
-                          context,
-                          icon: Icons.receipt_long,
-                          label: '판매내역',
-                          count: sellingProducts.length,
-                          iconColor: _iceBlue,
-                          iconBackground: const Color(0xFFE8F4FF),
-                          onTap: () {
-                            _showSnackBar(context, '판매중 탭에서 확인하세요.');
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildDashboardCard(
-                          context,
-                          icon: Icons.shopping_bag,
-                          label: '구매내역',
-                          count: 0,
-                          iconColor: const Color(0xFFF39C12),
-                          iconBackground: const Color(0xFFFFF3E0),
-                          onTap: () {
-                            _showSnackBar(context, '구매내역은 준비 중입니다.');
-                          },
-                        ),
+                    ),
+                    actions: [
+                      IconButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.settings, color: _deepNavy),
                       ),
                     ],
+                    bottom: PreferredSize(
+                      preferredSize: const Size.fromHeight(1),
+                      child: Container(height: 1, color: _borderLight),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                _buildSalesSection(
-                  context,
-                  products: selectedProducts,
-                  selectedTab: _selectedTab,
-                  sellingCount: sellingProducts.length,
-                  completedCount: completedProducts.length,
-                  hiddenCount: hiddenProducts.length,
-                  onTabSelected: _selectTab,
-                ),
-              ],
-            ),
-          ),
+                  body: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildProfileHeader(
+                          context,
+                          displayName: displayName,
+                          avatarImage: avatarImage,
+                        ),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildDashboardCard(
+                                  context,
+                                  icon: Icons.favorite,
+                                  label: '관심목록',
+                                  count: likedCount,
+                                  iconColor: const Color(0xFFE74C3C),
+                                  iconBackground: const Color(0xFFFFF1F1),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const LikeListScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildDashboardCard(
+                                  context,
+                                  icon: Icons.receipt_long,
+                                  label: '판매내역',
+                                  count: sellingProducts.length,
+                                  iconColor: _iceBlue,
+                                  iconBackground: const Color(0xFFE8F4FF),
+                                  onTap: () {
+                                    _showSnackBar(
+                                      context,
+                                      '판매중 탭에서 확인하세요.',
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildDashboardCard(
+                                  context,
+                                  icon: Icons.shopping_bag,
+                                  label: '구매내역',
+                                  count: 0,
+                                  iconColor: const Color(0xFFF39C12),
+                                  iconBackground:
+                                      const Color(0xFFFFF3E0),
+                                  onTap: () {
+                                    _showSnackBar(
+                                      context,
+                                      '구매내역은 준비 중입니다.',
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _buildSalesSection(
+                          context,
+                          products: selectedProducts,
+                          selectedTab: _selectedTab,
+                          sellingCount: sellingProducts.length,
+                          completedCount: completedProducts.length,
+                          hiddenCount: hiddenProducts.length,
+                          isLoading: isLoadingProducts,
+                          onTabSelected: _selectTab,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -802,6 +865,7 @@ class _MyScreenState extends State<MyScreen> {
     required int completedCount,
     required int hiddenCount,
     required ValueChanged<_SalesTab> onTabSelected,
+    bool isLoading = false,
   }) {
     final emptyMessage = selectedTab == _SalesTab.completed
         ? '거래완료 상품이 없습니다.'
@@ -835,13 +899,17 @@ class _MyScreenState extends State<MyScreen> {
           if (products.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: Text(
-                emptyMessage,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade500,
-                ),
-              ),
+              child: isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      emptyMessage,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
             )
           else
             ListView.separated(

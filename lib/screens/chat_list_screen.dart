@@ -13,9 +13,14 @@ import 'notification_screen.dart';
 
 /// 채팅 목록 화면
 /// Stitch 디자인 기반 - 프로필 이미지, 메시지, 상품 썸네일 표시
-class ChatListScreen extends StatelessWidget {
+class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
+  @override
+  State<ChatListScreen> createState() => _ChatListScreenState();
+}
+
+class _ChatListScreenState extends State<ChatListScreen> {
   // 색상 상수
   static const Color primaryBlue = Color(0xFF3E97EA);
   static const Color navyDark = Color(0xFF1A2B45);
@@ -23,6 +28,41 @@ class ChatListScreen extends StatelessWidget {
   static const Color backgroundLight = Color(0xFFFFFFFF);
   static const Color surfaceLight = Color(0xFFF8FAFC);
   static const Color borderColor = Color(0xFFF1F5F9);
+
+  final ScrollController _scrollController = ScrollController();
+  final int _pageSize = 30;
+  int _roomLimit = 30;
+  bool _isFetchingMore = false;
+  bool _hasMore = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients || !_hasMore || _isFetchingMore) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      _isFetchingMore = true;
+      setState(() {
+        _roomLimit += _pageSize;
+      });
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _isFetchingMore = false;
+      });
+    }
+  }
 
   String _formatLastTime(Timestamp timestamp) {
     final time = timestamp.toDate();
@@ -207,7 +247,7 @@ class ChatListScreen extends StatelessWidget {
     String? currentUserId,
   ) {
     return StreamBuilder<List<ChatRoom>>(
-      stream: chatService.getChatRooms(),
+      stream: chatService.getChatRooms(limit: _roomLimit),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -227,6 +267,7 @@ class ChatListScreen extends StatelessWidget {
         }
 
         final rooms = snapshot.data ?? [];
+        _hasMore = rooms.length >= _roomLimit;
         if (rooms.isEmpty) {
           return _buildEmptyState();
         }
@@ -234,6 +275,7 @@ class ChatListScreen extends StatelessWidget {
         return Container(
           color: backgroundLight,
           child: ListView.builder(
+            controller: _scrollController,
             padding: EdgeInsets.zero,
             itemCount: rooms.length,
             itemBuilder: (context, index) {

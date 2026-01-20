@@ -48,6 +48,7 @@ class _SellScreenState extends State<SellScreen> {
   // 카테고리별 필드 값
   String? _selectedSubCategory;
   String? _selectedCondition;
+  String? _selectedTradeLocationKey;
   
   // 동적 속성 저장 (Key: Attribute Key, Value: Selected Option)
   // 동적 속성 저장 (Key: Attribute Key, Value: Selected Option)
@@ -225,6 +226,7 @@ class _SellScreenState extends State<SellScreen> {
         sellerName: sellerName,
         sellerProfile: sellerProfile,
         sellerId: currentUser.uid,
+        tradeLocationKey: _selectedTradeLocationKey ?? '',
       );
 
       await context.read<ProductService>().addProduct(product, images: _selectedImages);
@@ -255,6 +257,7 @@ class _SellScreenState extends State<SellScreen> {
       _selectedSubCategory = null;
       _selectedSpecs.clear();
       _selectedCondition = null;
+      _selectedTradeLocationKey = null;
     });
   }
 
@@ -281,6 +284,9 @@ class _SellScreenState extends State<SellScreen> {
                     _buildThinDivider(),
                     // 카테고리별 상세 옵션
                     _buildCategorySpecificFields(),
+                    _buildThickDivider(),
+                    // 거래 희망 장소
+                    _buildTradeLocationSection(),
                     _buildThickDivider(),
                     // 상품 상태
                     _buildConditionSection(),
@@ -621,6 +627,100 @@ class _SellScreenState extends State<SellScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTradeLocationSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '거래 희망 장소',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: textDark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '도시 또는 리조트 중 1개를 선택해주세요.',
+            style: TextStyle(
+              fontSize: 12,
+              color: textGrey,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '도시',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: textDark,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildLocationChips(
+            options: TradeLocationConstants.cities,
+            prefix: 'city',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '리조트',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: textDark,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildLocationChips(
+            options: TradeLocationConstants.resorts,
+            prefix: 'resort',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationChips({
+    required List<String> options,
+    required String prefix,
+  }) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: options.map((option) {
+        final key = '$prefix:${option.trim()}';
+        final isSelected = _selectedTradeLocationKey == key;
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedTradeLocationKey = isSelected ? null : key;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? primaryBlue : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected ? primaryBlue : Colors.grey[300]!,
+              ),
+            ),
+            child: Text(
+              option,
+              style: TextStyle(
+                color: isSelected ? Colors.white : textGrey,
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 

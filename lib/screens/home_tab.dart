@@ -18,8 +18,43 @@ const _iceBlue = Color(0xFF00AEEF);
 const _iceBlueSoft = Color(0xFFE2F0FD);
 const _mutedText = Color(0xFF8A94A6);
 
-class HomeTab extends StatelessWidget {
+class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
+
+  @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> {
+  static const _homeQueryKey = 'home';
+  final ScrollController _scrollController = ScrollController();
+  bool _isAutoFetching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (maxScroll - currentScroll <= 200) {
+      final productService = context.read<ProductService>();
+      if (productService.hasMoreProducts &&
+          !productService.isPaginationLoading) {
+        productService.loadMoreProducts();
+      }
+    }
+  }
 
   String _formatPrice(int price) {
     final priceString = price.toString();
@@ -67,9 +102,20 @@ class HomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final productService = context.watch<ProductService>();
-    final products = productService.productList
-        .where((product) => product.status != ProductStatus.hidden)
-        .toList();
+    final currentIndex = context.watch<MainTabProvider>().currentIndex;
+    final isActiveTab = currentIndex == 0;
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (isActiveTab &&
+        isCurrentRoute &&
+        productService.activeQueryKey != _homeQueryKey &&
+        !productService.isPaginationLoading &&
+        !_isAutoFetching) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _ensureHomeProducts(context.read<ProductService>());
+      });
+    }
+    final products = productService.paginatedProducts;
     final currentUser = context.watch<UserService>().currentUser;
     final topPadding = MediaQuery.of(context).padding.top;
     const headerContentHeight = 140.0;
@@ -133,6 +179,7 @@ class HomeTab extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           SliverPersistentHeader(
             pinned: true,
@@ -268,7 +315,16 @@ class HomeTab extends StatelessWidget {
               ),
             ),
           ),
-          if (products.isEmpty)
+          if (products.isEmpty && productService.isPaginationLoading)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (products.isEmpty)
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -290,6 +346,14 @@ class HomeTab extends StatelessWidget {
               sliver: SliverGrid(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
+                    if (index >= products.length) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
                     final product = products[index];
                     final isLiked = productService.isLiked(product.id);
                     return ProductCard(
@@ -317,7 +381,8 @@ class HomeTab extends StatelessWidget {
                       },
                     );
                   },
-                  childCount: products.length,
+                  childCount: products.length +
+                      (productService.hasMoreProducts ? 1 : 0),
                 ),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
@@ -331,6 +396,16 @@ class HomeTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _ensureHomeProducts(ProductService productService) {
+    if (_isAutoFetching) return;
+    _isAutoFetching = true;
+    productService
+        .fetchProductsPaginated(contextKey: _homeQueryKey)
+        .whenComplete(() {
+      _isAutoFetching = false;
+    });
   }
 }
 

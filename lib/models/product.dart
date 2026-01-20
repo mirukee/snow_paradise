@@ -81,6 +81,7 @@ class Product {
   final String sellerName;
   final String sellerProfile;
   final String sellerId;
+  final String tradeLocationKey;
   final ProductStatus status;
   final int likeCount;
   final int chatCount;
@@ -115,6 +116,7 @@ class Product {
     required this.sellerName,
     required this.sellerProfile,
     required this.sellerId,
+    this.tradeLocationKey = '',
     this.status = ProductStatus.forSale,
     this.likeCount = 0,
     this.chatCount = 0,
@@ -182,6 +184,7 @@ class Product {
       sellerName: json['sellerName']?.toString() ?? '',
       sellerProfile: json['sellerProfile']?.toString() ?? '',
       sellerId: json['sellerId']?.toString() ?? '',
+      tradeLocationKey: json['tradeLocationKey']?.toString() ?? '',
       status: productStatusFromString(json['status']?.toString()),
       likeCount: parseCount(json['likeCount']),
       chatCount: parseCount(json['chatCount']),
@@ -208,6 +211,7 @@ class Product {
       'sellerName': sellerName,
       'sellerProfile': sellerProfile,
       'sellerId': sellerId,
+      'tradeLocationKey': tradeLocationKey,
       'status': status.firestoreValue,
       'likeCount': likeCount,
       'chatCount': chatCount,

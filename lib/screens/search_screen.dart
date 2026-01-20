@@ -51,7 +51,6 @@ class _SearchScreenState extends State<SearchScreen> {
   Map<String, dynamic> _filterSpecs = {};
   
   List<SearchSuggestion> _suggestions = []; // 타입 정보 포함
-  List<Product> _results = [];
   List<String> _recentSearches = [];
   List<String> _popularKeywords = []; // 인기 검색어
 
@@ -59,10 +58,12 @@ class _SearchScreenState extends State<SearchScreen> {
   
   // 무한 스크롤용 ScrollController
   final ScrollController _scrollController = ScrollController();
+  late final String _contextKey;
 
   @override
   void initState() {
     super.initState();
+    _contextKey = 'search-${DateTime.now().microsecondsSinceEpoch}';
     _loadRecentSearches();
     _scrollController.addListener(_onScroll); // 스크롤 리스너 추가
   }
@@ -78,10 +79,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (maxScroll - currentScroll <= threshold) {
       final productService = context.read<ProductService>();
       if (productService.hasMoreProducts && !productService.isPaginationLoading) {
-        productService.loadMoreProducts(
-          category: _selectedCategory == '전체' ? null : _selectedCategory,
-          query: _query.isEmpty ? null : _query,
-        );
+        productService.loadMoreProducts();
       }
     }
   }
@@ -144,6 +142,26 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
+  bool _hasActiveFilters() {
+    return _filterSpecs.entries.any((entry) {
+      final value = entry.value;
+      if (value == null) return false;
+      if (value is String && value.isEmpty) return false;
+      if (value is List && value.isEmpty) return false;
+      if (value is Map) {
+        return (value['min'] as String?)?.isNotEmpty == true ||
+            (value['max'] as String?)?.isNotEmpty == true;
+      }
+      return true;
+    });
+  }
+
+  bool _hasSearchCriteria() {
+    final hasCategoryFilter =
+        _selectedCategory != '전체' || _selectedSubCategory != '전체';
+    return _query.trim().isNotEmpty || _hasActiveFilters() || hasCategoryFilter;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -166,12 +184,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _handleQueryChanged(String value, ProductService productService) {
     // 입력 중에는 자동완성만 갱신
+    productService.resetPagination();
     setState(() {
       _query = value;
       _isSubmitted = false;
       _isLoading = false;
       _suggestions = productService.getSearchSuggestionsWithType(value); // 타입 정보 포함
-      _results = [];
     });
   }
 
@@ -189,6 +207,7 @@ class _SearchScreenState extends State<SearchScreen> {
   
   void _clearQuery(ProductService productService) {
     _controller.clear();
+    productService.resetPagination();
     setState(() {
       _query = '';
     });
@@ -242,28 +261,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _performSearch(ProductService productService) async {
-    // 필터가 적용되어 있는지 확인
-    final hasActiveFilters = _filterSpecs.entries.any((e) {
-      final val = e.value;
-      if (val == null) return false;
-      if (val is String && val.isEmpty) return false;
-      if (val is List && val.isEmpty) return false;
-      if (val is Map) {
-        return (val['min'] as String?)?.isNotEmpty == true ||
-               (val['max'] as String?)?.isNotEmpty == true;
-      }
-      return true;
-    });
-    // 카테고리/소분류 선택도 검색 조건으로 간주
-    final hasCategoryFilter = _selectedCategory != '전체' || _selectedSubCategory != '전체';
-    
-    // 검색어가 비어있고 필터도 없으면 인기/최근 검색어 화면을 보여줌
-    if (_query.trim().isEmpty && !hasActiveFilters && !hasCategoryFilter) {
+    if (!_hasSearchCriteria()) {
+      productService.resetPagination();
       setState(() {
         _isSubmitted = false;
         _isLoading = false;
         _suggestions = [];
-        _results = [];
       });
       return;
     }
@@ -275,97 +278,18 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
-      // 기본 검색 실행
-      final results = await productService.searchProducts(
-        _query,
-        _selectedCategory,
+      await productService.fetchProductsPaginated(
+        category: _selectedCategory == '전체' ? null : _selectedCategory,
+        subCategory: _selectedSubCategory == '전체' ? null : _selectedSubCategory,
+        query: _query,
+        filterSpecs: _filterSpecs,
+        contextKey: _contextKey,
       );
-      if (!mounted) return;
-      
-      // 로컬 필터링: 소분류 + 동적 속성 필터
-      final filteredResults = results.where((product) {
-        // 1. 소분류 필터
-        if (_selectedSubCategory != '전체' && _selectedCategory != '전체') {
-          if (product.subCategory != _selectedSubCategory) return false;
-        }
-        
-        // 2. 가격 필터 (별도 처리 - product.price 사용)
-        final priceFilter = _filterSpecs['price'] as Map<String, dynamic>?;
-        if (priceFilter != null) {
-          final minStr = priceFilter['min'] as String?;
-          final maxStr = priceFilter['max'] as String?;
-          
-          if (minStr != null && minStr.isNotEmpty) {
-            final minPrice = int.tryParse(minStr) ?? 0;
-            if (product.price < minPrice) return false;
-          }
-          if (maxStr != null && maxStr.isNotEmpty) {
-            final maxPrice = int.tryParse(maxStr) ?? 0;
-            if (product.price > maxPrice) return false;
-          }
-        }
-        
-        // 3. 동적 속성 필터
-        for (final entry in _filterSpecs.entries) {
-          final filterKey = entry.key;
-          final filterVal = entry.value;
-
-          // 가격 필터는 위에서 처리했으므로 스킵
-          if (filterKey == 'price') continue;
-          
-          if (filterVal == null) continue;
-          if (filterVal is String && filterVal.isEmpty) continue;
-          if (filterVal is List && filterVal.isEmpty) continue;
-
-          final productVal = product.specs[filterKey];
-          if (productVal == null) return false;
-
-          // 다중 선택 (List)
-          if (filterVal is List) {
-            if (!filterVal.contains(productVal)) return false;
-          } 
-          // 범위 검색 (Map)
-          else if (filterVal is Map) {
-            final minStr = filterVal['min'] as String?;
-            final maxStr = filterVal['max'] as String?;
-            
-            try {
-              String pValStr = productVal.replaceAll(RegExp(r'[^0-9.]'), '');
-              if (pValStr.isEmpty) return false;
-              
-              final pNum = double.parse(pValStr);
-
-              if (minStr != null && minStr.isNotEmpty) {
-                final minNum = double.parse(minStr);
-                if (pNum < minNum) return false;
-              }
-              if (maxStr != null && maxStr.isNotEmpty) {
-                final maxNum = double.parse(maxStr);
-                if (pNum > maxNum) return false;
-              }
-            } catch (e) {
-              return false;
-            }
-          }
-          // 단일 값 (String)
-          else {
-            if (productVal != filterVal) return false;
-          }
-        }
-        return true;
-      }).toList();
-      
-      setState(() {
-        _results = filteredResults;
-      });
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('검색에 실패했습니다.')),
       );
-      setState(() {
-        _results = [];
-      });
     } finally {
       if (!mounted) return;
       setState(() {
@@ -407,6 +331,17 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final productService = context.watch<ProductService>();
     final normalizedQuery = _query.trim();
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (isCurrentRoute &&
+        _hasSearchCriteria() &&
+        productService.activeQueryKey != _contextKey &&
+        !productService.isPaginationLoading &&
+        !_isLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _performSearch(context.read<ProductService>());
+      });
+    }
 
     return Scaffold(
       backgroundColor: backgroundLight,
@@ -663,6 +598,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// 검색 결과 본문
   Widget _buildSearchBody(ProductService productService, String normalizedQuery) {
+    final results = productService.paginatedProducts;
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(strokeWidth: 2, color: primaryBlue),
@@ -891,7 +827,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     // 검색 결과 없음
-    if (_results.isEmpty) {
+    if (results.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -928,7 +864,7 @@ class _SearchScreenState extends State<SearchScreen> {
               children: [
                 const TextSpan(text: '검색 결과 '),
                 TextSpan(
-                  text: '${_results.length}',
+                  text: '${results.length}',
                   style: const TextStyle(color: textDark, fontWeight: FontWeight.bold),
                 ),
                 const TextSpan(text: '개'),
@@ -947,10 +883,11 @@ class _SearchScreenState extends State<SearchScreen> {
               crossAxisSpacing: 16,
               childAspectRatio: 0.52, // 4:5 비율 이미지 + 텍스트 영역
             ),
-            itemCount: _results.length + (productService.hasMoreProducts && _results.isNotEmpty ? 1 : 0),
+            itemCount: results.length +
+                (productService.hasMoreProducts && results.isNotEmpty ? 1 : 0),
             itemBuilder: (context, index) {
               // 마지막 아이템: 로딩 인디케이터
-              if (index >= _results.length) {
+              if (index >= results.length) {
                 return const Center(
                   child: Padding(
                     padding: EdgeInsets.all(16),
@@ -958,7 +895,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 );
               }
-              return _buildProductGridCard(context, _results[index], productService);
+              return _buildProductGridCard(context, results[index], productService);
             },
           ),
         ),
@@ -1326,6 +1263,10 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
                   const SizedBox(height: 24),
                   const Divider(),
                   const SizedBox(height: 16),
+                  _buildTradeLocationFilter(),
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
                   // 동적 속성 필터
                   DynamicAttributeForm(
                     category: widget.category,
@@ -1415,7 +1356,9 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
     
     // 길이/기타 범위 필터 검증
     for (final entry in _selectedSpecs.entries) {
-      if (entry.key == 'price') continue; // 가격은 위에서 처리
+      if (entry.key == 'price' || entry.key == 'tradeLocationKeys') {
+        continue; // 가격/직거래 장소는 위에서 처리
+      }
       
       final value = entry.value;
       if (value is Map) {
@@ -1435,6 +1378,126 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
     }
     
     return null;
+  }
+
+  Widget _buildTradeLocationFilter() {
+    final selected = List<String>.from(
+      (_selectedSpecs['tradeLocationKeys'] as List?) ?? [],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.location_on, size: 20, color: primaryBlue),
+            const SizedBox(width: 8),
+            const Text(
+              '직거래 장소',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: textDark,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          '최대 2개까지 선택할 수 있습니다.',
+          style: TextStyle(
+            fontSize: 12,
+            color: textMuted,
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          '도시',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: textDark,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _buildLocationChips(
+          options: TradeLocationConstants.cities,
+          prefix: 'city',
+          selectedKeys: selected,
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          '리조트',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: textDark,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _buildLocationChips(
+          options: TradeLocationConstants.resorts,
+          prefix: 'resort',
+          selectedKeys: selected,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLocationChips({
+    required List<String> options,
+    required String prefix,
+    required List<String> selectedKeys,
+  }) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: options.map((option) {
+        final key = '$prefix:${option.trim()}';
+        final isSelected = selectedKeys.contains(key);
+        return GestureDetector(
+          onTap: () {
+            final updated = List<String>.from(selectedKeys);
+            if (isSelected) {
+              updated.remove(key);
+            } else {
+              if (updated.length >= 2) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('직거래 장소는 최대 2개까지 선택할 수 있어요.')),
+                );
+                return;
+              }
+              updated.add(key);
+            }
+            setState(() {
+              if (updated.isEmpty) {
+                _selectedSpecs.remove('tradeLocationKeys');
+              } else {
+                _selectedSpecs['tradeLocationKeys'] = updated;
+              }
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? primaryBlue : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected ? primaryBlue : Colors.grey[300]!,
+              ),
+            ),
+            child: Text(
+              option,
+              style: TextStyle(
+                color: isSelected ? Colors.white : textMuted,
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
   }
 
   /// 가격 필터 위젯

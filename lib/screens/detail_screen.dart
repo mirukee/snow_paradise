@@ -195,6 +195,20 @@ class _DetailScreenState extends State<DetailScreen> {
     return buffer.toString();
   }
 
+  String _formatTradeLocation(String tradeLocationKey) {
+    final trimmed = tradeLocationKey.trim();
+    if (trimmed.isEmpty) {
+      return '거래 장소 미정';
+    }
+    if (trimmed.startsWith('city:')) {
+      return trimmed.replaceFirst('city:', '');
+    }
+    if (trimmed.startsWith('resort:')) {
+      return trimmed.replaceFirst('resort:', '');
+    }
+    return trimmed;
+  }
+
   Color _statusColor(BuildContext context, ProductStatus status) {
     switch (status) {
       case ProductStatus.forSale:
@@ -299,6 +313,8 @@ class _DetailScreenState extends State<DetailScreen> {
     final currentProduct =
         productService.getProductById(widget.product.id) ?? widget.product;
     final displayStatus = _overrideStatus ?? currentProduct.status;
+    final tradeLocationText =
+        _formatTradeLocation(currentProduct.tradeLocationKey);
     final isLiked = productService.isLiked(currentProduct.id);
     final hasEngagement =
         currentProduct.likeCount > 0 || currentProduct.chatCount > 0;
@@ -740,9 +756,9 @@ class _DetailScreenState extends State<DetailScreen> {
                               ),
                             ),
                             const SizedBox(width: 10),
-                            const Text(
-                              '서울 강남구',
-                              style: TextStyle(
+                            Text(
+                              tradeLocationText,
+                              style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 color: textDark,

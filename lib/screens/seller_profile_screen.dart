@@ -11,7 +11,7 @@ import '../widgets/product_image.dart';
 import '../widgets/report_dialog.dart';
 import 'detail_screen.dart';
 
-class SellerProfileScreen extends StatelessWidget {
+class SellerProfileScreen extends StatefulWidget {
   const SellerProfileScreen({
     super.key,
     required this.sellerId,
@@ -26,6 +26,27 @@ class SellerProfileScreen extends StatelessWidget {
   static const _iceBlue = Color(0xFF00AEEF);
   static const _deepNavy = Color(0xFF101922);
   static const _background = Color(0xFFF6F8FA);
+
+  @override
+  State<SellerProfileScreen> createState() => _SellerProfileScreenState();
+}
+
+class _SellerProfileScreenState extends State<SellerProfileScreen> {
+  static const _iceBlue = SellerProfileScreen._iceBlue;
+  static const _deepNavy = SellerProfileScreen._deepNavy;
+  static const _background = SellerProfileScreen._background;
+
+  late final String _contextKey;
+  bool _isAutoFetching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final sellerId = widget.sellerId.trim();
+    final resolvedId = sellerId.isEmpty ? 'unknown' : sellerId;
+    _contextKey =
+        'seller-$resolvedId-${DateTime.now().microsecondsSinceEpoch}';
+  }
 
   String _formatPrice(int price) {
     final priceString = price.toString();
@@ -62,7 +83,7 @@ class SellerProfileScreen extends StatelessWidget {
   }
 
   List<Product> _sellerProducts(List<Product> products) {
-    final trimmedSellerId = sellerId.trim();
+    final trimmedSellerId = widget.sellerId.trim();
     if (trimmedSellerId.isNotEmpty) {
       return products
           .where(
@@ -72,8 +93,8 @@ class SellerProfileScreen extends StatelessWidget {
           )
           .toList();
     }
-    final trimmedName = sellerName.trim();
-    final trimmedProfile = sellerProfileImage.trim();
+    final trimmedName = widget.sellerName.trim();
+    final trimmedProfile = widget.sellerProfileImage.trim();
     return products
         .where(
           (product) =>
@@ -106,11 +127,21 @@ class SellerProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final productService = context.watch<ProductService>();
     final currentUser = context.watch<UserService>().currentUser;
-    final products = _sellerProducts(productService.productList)
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (isCurrentRoute &&
+        productService.activeQueryKey != _contextKey &&
+        !productService.isPaginationLoading &&
+        !_isAutoFetching) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _refreshProducts(context.read<ProductService>());
+      });
+    }
+    final products = _sellerProducts(productService.paginatedProducts)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final tags = _buildTags(products);
     const temperature = 37.5;
-    final trimmedSellerId = sellerId.trim();
+    final trimmedSellerId = widget.sellerId.trim();
 
     Widget buildProfile({
       required String displayName,
@@ -310,10 +341,11 @@ class SellerProfileScreen extends StatelessWidget {
     }
 
     if (trimmedSellerId.isEmpty) {
-      final fallbackName = sellerName.isEmpty ? '판매자' : sellerName;
+      final fallbackName =
+          widget.sellerName.isEmpty ? '판매자' : widget.sellerName;
       return buildProfile(
         displayName: fallbackName,
-        profileImageUrl: sellerProfileImage,
+        profileImageUrl: widget.sellerProfileImage,
       );
     }
 
@@ -327,11 +359,11 @@ class SellerProfileScreen extends StatelessWidget {
         final userModel = data == null ? null : UserModel.fromJson(data);
         final resolvedName = userModel?.nickname.trim().isNotEmpty == true
             ? userModel!.nickname
-            : (sellerName.isEmpty ? '판매자' : sellerName);
+            : (widget.sellerName.isEmpty ? '판매자' : widget.sellerName);
         final hasUserDoc = data != null;
         final profileImageUrl = userModel?.profileImageUrl?.trim() ?? '';
         final resolvedProfileImage =
-            hasUserDoc ? profileImageUrl : sellerProfileImage;
+            hasUserDoc ? profileImageUrl : widget.sellerProfileImage;
 
         return buildProfile(
           displayName: resolvedName,
@@ -339,6 +371,19 @@ class SellerProfileScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _refreshProducts(ProductService productService) async {
+    if (_isAutoFetching) {
+      return;
+    }
+    _isAutoFetching = true;
+    final trimmedSellerId = widget.sellerId.trim();
+    await productService.fetchProductsPaginated(
+      sellerId: trimmedSellerId.isEmpty ? null : trimmedSellerId,
+      contextKey: _contextKey,
+    );
+    _isAutoFetching = false;
   }
 }
 
@@ -549,6 +594,11 @@ class _SellerProductGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (products.isEmpty) {
+      if (productService.isPaginationLoading) {
+        return const Center(
+          child: CircularProgressIndicator(strokeWidth: 2),
+        );
+      }
       return const Center(
         child: Text(
           '등록된 판매 물품이 없습니다.',
@@ -561,42 +611,63 @@ class _SellerProductGrid extends StatelessWidget {
       );
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        childAspectRatio: 0.72,
-      ),
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final product = products[index];
-        final isLiked = productService.isLiked(product.id);
-        return _SellerProductCard(
-          product: product,
-          priceText: formatPrice(product.price),
-          timeText: formatTimeAgo(product.createdAt),
-          isLiked: isLiked,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DetailScreen(product: product),
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 200) {
+          if (productService.hasMoreProducts &&
+              !productService.isPaginationLoading) {
+            productService.loadMoreProducts();
+          }
+        }
+        return false;
+      },
+      child: GridView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
+          childAspectRatio: 0.72,
+        ),
+        itemCount:
+            products.length + (productService.hasMoreProducts ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= products.length) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
             );
-          },
-          onLikeTap: () {
-            if (currentUser == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('로그인이 필요합니다.')),
+          }
+          final product = products[index];
+          final isLiked = productService.isLiked(product.id);
+          return _SellerProductCard(
+            product: product,
+            priceText: formatPrice(product.price),
+            timeText: formatTimeAgo(product.createdAt),
+            isLiked: isLiked,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DetailScreen(product: product),
+                ),
               );
-              return;
-            }
-            productService.toggleLike(product.id, currentUser!.uid);
-          },
-        );
-      },
+            },
+            onLikeTap: () {
+              if (currentUser == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('로그인이 필요합니다.')),
+                );
+                return;
+              }
+              productService.toggleLike(product.id, currentUser!.uid);
+            },
+          );
+        },
+      ),
     );
   }
 }

@@ -18,7 +18,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => UserService()),
-        ChangeNotifierProvider(create: (context) => ProductService()),
+        ChangeNotifierProvider(create: (context) => ProductService(isAdmin: true)),
         ChangeNotifierProvider(create: (context) => ProfileProvider()),
         ChangeNotifierProvider(create: (context) => AdminAuthProvider()),
       ],

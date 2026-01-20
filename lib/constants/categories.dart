@@ -54,6 +54,23 @@ class CategoryAttributes {
   static const String ATTR_SIZE_GEAR = 'size_gear'; // S M L
   static const String ATTR_GENDER = 'gender';
 
+  // 필터 토큰 키 정의 (서버 Query용)
+  static const Map<String, String> filterTokenKeyByAttribute = {
+    ATTR_BRAND_SKI: 'b',
+    ATTR_BRAND_BOARD: 'b',
+    ATTR_BRAND_APPAREL: 'b',
+    ATTR_BRAND_GEAR: 'b',
+    ATTR_LENGTH_SKI: 'l',
+    ATTR_LENGTH_BOARD: 'l',
+    ATTR_SHAPE_SKI: 's',
+    ATTR_SHAPE_BOARD: 's',
+    ATTR_SIZE_BOOT: 'sz',
+    ATTR_SIZE_APPAREL: 'sz',
+    ATTR_SIZE_GEAR: 'sz',
+    ATTR_GENDER: 'g',
+    ATTR_YEAR: 'y',
+  };
+
   // 카테고리/소분류별 필요한 속성 목록 매핑
   // Key: "$Category/$SubCategory"
   static const Map<String, List<String>> requiredAttributes = {
@@ -74,6 +91,30 @@ class CategoryAttributes {
     // 장비/보호대
     '장비/보호대/헬멧': [ATTR_BRAND_GEAR, ATTR_SIZE_GEAR],
     '장비/보호대/고글': [ATTR_BRAND_GEAR], // 고글은 보통 프리사이즈이나 모델명 중요
+    '장비/보호대/보호대': [ATTR_BRAND_GEAR, ATTR_SIZE_GEAR],
+    '장비/보호대/장갑': [ATTR_BRAND_GEAR, ATTR_SIZE_GEAR],
+  };
+
+  // 검색/필터용 핵심 속성 프로파일 (서버 Query용)
+  // Key: "$Category/$SubCategory"
+  static const Map<String, List<String>> filterProfiles = {
+    // 스키
+    '스키/스키': [ATTR_BRAND_SKI, ATTR_LENGTH_SKI, ATTR_SHAPE_SKI, ATTR_YEAR],
+    '스키/부츠': [ATTR_BRAND_SKI, ATTR_SIZE_BOOT, ATTR_YEAR],
+
+    // 스노우보드
+    '스노우보드/데크': [ATTR_BRAND_BOARD, ATTR_LENGTH_BOARD, ATTR_SHAPE_BOARD, ATTR_YEAR],
+    '스노우보드/바인딩': [ATTR_BRAND_BOARD, ATTR_SIZE_GEAR, ATTR_YEAR],
+    '스노우보드/부츠': [ATTR_BRAND_BOARD, ATTR_SIZE_BOOT, ATTR_YEAR],
+
+    // 의류
+    '의류/상의': [ATTR_BRAND_APPAREL, ATTR_SIZE_APPAREL, ATTR_GENDER, ATTR_YEAR],
+    '의류/하의': [ATTR_BRAND_APPAREL, ATTR_SIZE_APPAREL, ATTR_GENDER, ATTR_YEAR],
+    '의류/일체형': [ATTR_BRAND_APPAREL, ATTR_SIZE_APPAREL, ATTR_GENDER, ATTR_YEAR],
+
+    // 장비/보호대
+    '장비/보호대/헬멧': [ATTR_BRAND_GEAR, ATTR_SIZE_GEAR],
+    '장비/보호대/고글': [ATTR_BRAND_GEAR],
     '장비/보호대/보호대': [ATTR_BRAND_GEAR, ATTR_SIZE_GEAR],
     '장비/보호대/장갑': [ATTR_BRAND_GEAR, ATTR_SIZE_GEAR],
   };
@@ -155,4 +196,51 @@ class CategoryAttributes {
       );
     }
   }
+
+  static List<String> getFilterProfile(String category, String subCategory) {
+    final key = '$category/$subCategory';
+    return filterProfiles[key] ?? const [];
+  }
+
+  static String? getTokenKeyForAttribute(String attributeKey) {
+    return filterTokenKeyByAttribute[attributeKey];
+  }
+
+  static bool isLengthAttribute(String attributeKey) {
+    return attributeKey == ATTR_LENGTH_SKI || attributeKey == ATTR_LENGTH_BOARD;
+  }
+}
+
+class TradeLocationConstants {
+  static const List<String> cities = [
+    '서울',
+    '경기',
+    '인천',
+    '강원',
+    '충북',
+    '충남',
+    '전북',
+    '전남',
+    '경북',
+    '경남',
+    '부산',
+    '대구',
+    '대전',
+    '광주',
+    '울산',
+    '세종',
+    '제주',
+  ];
+
+  static const List<String> resorts = [
+    '하이원',
+    '용평',
+    '휘닉스',
+    '웰리힐리',
+    '오투',
+    '지산',
+    '곤지암',
+    '무주',
+    '에덴밸리',
+  ];
 }

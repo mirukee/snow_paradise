@@ -125,6 +125,13 @@ class _DynamicAttributeFormState extends State<DynamicAttributeForm> {
                   if (isSelected) {
                     newList.remove(option);
                   } else {
+                    if (key == CategoryAttributes.ATTR_YEAR &&
+                        newList.length >= 2) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('연식은 최대 2개까지 선택할 수 있어요.')),
+                      );
+                      return;
+                    }
                     newList.add(option);
                   }
                   widget.onSpecChanged(key, newList);

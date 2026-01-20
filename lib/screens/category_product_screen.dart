@@ -29,6 +29,9 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
 
   // 선택된 서브카테고리 인덱스
   int _selectedSubCategoryIndex = 0;
+  final ScrollController _scrollController = ScrollController();
+  late final String _contextKey;
+  bool _isAutoFetching = false;
   
   // 적용된 필터 스펙 (Key: Attribute Key, Value: Selected Option)
   Map<String, dynamic> _filterSpecs = {};
@@ -73,7 +76,16 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
   @override
   Widget build(BuildContext context) {
     final productService = context.watch<ProductService>();
-    final products = productService.getByCategory(widget.category);
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (isCurrentRoute &&
+        productService.activeQueryKey != _contextKey &&
+        !productService.isPaginationLoading &&
+        !_isAutoFetching) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _refreshProducts(context.read<ProductService>());
+      });
+    }
 
     return Scaffold(
       backgroundColor: backgroundLight,
@@ -88,74 +100,69 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
             // 상품 그리드
             Expanded(
               child: () {
-                // 로컬 필터링 로직
-                // '전체' 탭(index 0)이 아니면 subCategory가 일치하는 상품만 필터링
-                final allProducts = productService.getByCategory(widget.category);
-                final currentSubTabs = ['전체', ...CategoryConstants.getSubCategories(widget.category)];
-                
-                  final filteredProducts = _selectedSubCategoryIndex == 0
-                      ? allProducts
-                      : allProducts.where((p) {
-                          // 1. 서브카테고리 일치
-                          if (p.subCategory != currentSubTabs[_selectedSubCategoryIndex]) return false;
-                          
-                          // 2. 동적 속성 필터링 (스마트 필터)
-                          for (final entry in _filterSpecs.entries) {
-                            final filterKey = entry.key;
-                            final filterVal = entry.value;
-
-                            if (filterVal == null) continue;
-                            if (filterVal is String && filterVal.isEmpty) continue;
-                            if (filterVal is List && filterVal.isEmpty) continue;
-
-                            final productVal = p.specs[filterKey];
-                            if (productVal == null) return false; // 속성 값 없으면 제외 (엄격)
-
-                            // 2-1. 다중 선택 (List) - OR 연산
-                            if (filterVal is List) {
-                              if (!filterVal.contains(productVal)) return false;
-                            } 
-                            // 2-2. 범위 검색 (Map {'min': '..', 'max': '..'})
-                            else if (filterVal is Map) {
-                              final minStr = filterVal['min'] as String?;
-                              final maxStr = filterVal['max'] as String?;
-                              
-                              try {
-                                // 제품 값을 숫자로 파싱 (cm 등 단위 제거 필요할 수 있음)
-                                String pValStr = productVal.replaceAll(RegExp(r'[^0-9.]'), '');
-                                if (pValStr.isEmpty) return false;
-                                
-                                final pNum = double.parse(pValStr);
-
-                                if (minStr != null && minStr.isNotEmpty) {
-                                  final minNum = double.parse(minStr);
-                                  if (pNum < minNum) return false;
-                                }
-                                if (maxStr != null && maxStr.isNotEmpty) {
-                                  final maxNum = double.parse(maxStr);
-                                  if (pNum > maxNum) return false;
-                                }
-                              } catch (e) {
-                                return false; // 파싱 실패 시 제외
-                              }
-                            }
-                            // 2-3. 단일 값 (String) - 정확 일치
-                            else {
-                              if (productVal != filterVal) return false;
-                            }
-                          }
-                          return true;
-                        }).toList();
-
-                return filteredProducts.isEmpty
+                final products = productService.paginatedProducts;
+                if (products.isEmpty &&
+                    (productService.isPaginationLoading ||
+                        _isAutoFetching)) {
+                  return const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                }
+                return products.isEmpty
                     ? _buildEmptyState()
-                    : _buildProductGrid(context, filteredProducts, productService);
+                    : _buildProductGrid(context, products, productService);
               }(),
             ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _contextKey =
+        'category-${widget.category}-${DateTime.now().microsecondsSinceEpoch}';
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (maxScroll - currentScroll <= 200) {
+      final productService = context.read<ProductService>();
+      if (productService.hasMoreProducts &&
+          !productService.isPaginationLoading) {
+        productService.loadMoreProducts();
+      }
+    }
+  }
+
+  Future<void> _refreshProducts(
+    ProductService productService, {
+    bool force = false,
+  }) async {
+    if (_isAutoFetching && !force) {
+      return;
+    }
+    _isAutoFetching = true;
+    final subCategory = _currentSubCategories[_selectedSubCategoryIndex];
+    await productService.fetchProductsPaginated(
+      category: widget.category,
+      subCategory: subCategory == '전체' ? null : subCategory,
+      filterSpecs: _filterSpecs,
+      contextKey: _contextKey,
+    );
+    _isAutoFetching = false;
   }
 
   /// 헤더 - 뒤로가기, 타이틀, 필터 버튼
@@ -214,10 +221,16 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
             return Padding(
               padding: const EdgeInsets.only(right: 24),
               child: GestureDetector(
-                onTap: () => setState(() {
-                  _selectedSubCategoryIndex = index;
-                  _filterSpecs.clear(); // 탭 변경 시 필터 초기화
-                }),
+                onTap: () {
+                  setState(() {
+                    _selectedSubCategoryIndex = index;
+                    _filterSpecs.clear(); // 탭 변경 시 필터 초기화
+                  });
+                  _refreshProducts(
+                    context.read<ProductService>(),
+                    force: true,
+                  );
+                },
                 child: Column(
                   children: [
                     Padding(
@@ -285,6 +298,7 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
     ProductService productService,
   ) {
     return GridView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
@@ -292,8 +306,17 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
         crossAxisSpacing: 16,
         childAspectRatio: 0.55, // 3:4 비율 + 텍스트 영역
       ),
-      itemCount: products.length,
+      itemCount:
+          products.length + (productService.hasMoreProducts ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index >= products.length) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
         return _buildProductCard(context, products[index], productService);
       },
     );
@@ -479,6 +502,10 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
       setState(() {
         _filterSpecs = result;
       });
+      _refreshProducts(
+        context.read<ProductService>(),
+        force: true,
+      );
     }
   }
 }

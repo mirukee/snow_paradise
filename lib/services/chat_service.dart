@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/chat_model.dart';
 
@@ -33,12 +34,19 @@ class ChatService {
     final buyerId = user.uid;
     final buyerName = user.displayName ?? user.email ?? '게스트';
 
-    final querySnapshot = await _firestore
-        .collection('chat_rooms')
-        .where('productId', isEqualTo: productId)
-        .where('participants', arrayContains: buyerId)
-        .limit(10)
-        .get();
+    QuerySnapshot<Map<String, dynamic>> querySnapshot;
+    try {
+      querySnapshot = await _firestore
+          .collection('chat_rooms')
+          .where('productId', isEqualTo: productId)
+          .where('participants', arrayContains: buyerId)
+          .limit(10)
+          .get();
+    } catch (error, stackTrace) {
+      debugPrint('채팅방 조회 실패: $error');
+      debugPrint('$stackTrace');
+      rethrow;
+    }
 
     for (final doc in querySnapshot.docs) {
       final data = doc.data();
@@ -83,13 +91,18 @@ class ChatService {
       'lastReadAtSeller': Timestamp.fromMillisecondsSinceEpoch(0),
       'isFirstMessageSent': false, // 첫 메시지 전송 시 true로 변경되며 chatCount 증가
     };
-    final roomDoc = await _firestore.collection('chat_rooms').add(roomData);
-    // chatCount 증가는 sendMessage에서 첫 메시지 전송 시 처리됨
-
-    return ChatRoom.fromJson({
-      ...roomData,
-      'roomId': roomDoc.id,
-    });
+    try {
+      final roomDoc = await _firestore.collection('chat_rooms').add(roomData);
+      // chatCount 증가는 sendMessage에서 첫 메시지 전송 시 처리됨
+      return ChatRoom.fromJson({
+        ...roomData,
+        'roomId': roomDoc.id,
+      });
+    } catch (error, stackTrace) {
+      debugPrint('채팅방 생성 실패: $error');
+      debugPrint('$stackTrace');
+      rethrow;
+    }
   }
 
   Stream<List<ChatRoom>> getChatRooms({int? limit}) {
@@ -156,33 +169,68 @@ class ChatService {
     if (user == null) {
       return Stream.value(0);
     }
-    final userId = user.uid;
-    return getChatRooms().map((rooms) {
-      var total = 0;
-      for (final room in rooms) {
-        final isSeller = room.sellerId == userId;
-        total += isSeller ? room.unreadCountSeller : room.unreadCountBuyer;
-      }
-      return total;
-    });
+    return _firestore.collection('users').doc(user.uid).snapshots().map(
+      (snapshot) {
+        final data = snapshot.data();
+        final rawTotal = data?['unreadTotal'];
+        if (rawTotal is num) {
+          return rawTotal.toInt();
+        }
+        return int.tryParse(rawTotal?.toString() ?? '') ?? 0;
+      },
+    );
   }
 
-  Stream<List<ChatMessage>> getMessages(
+  Stream<MessagePage> watchLatestMessages(
     String roomId, {
     int limit = 30,
   }) {
-    return _firestore
+    final query = _firestore
         .collection('chat_rooms')
         .doc(roomId)
         .collection('messages')
         .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return ChatMessage.fromJson(doc.data());
-      }).toList();
+        .limit(limit);
+
+    return query.snapshots().map((snapshot) {
+      final messages = snapshot.docs
+          .map((doc) => ChatMessage.fromJson(doc.data(), docId: doc.id))
+          .toList();
+      final lastDoc =
+          snapshot.docs.isEmpty ? null : snapshot.docs.last;
+      return MessagePage(
+        messages: messages,
+        lastDoc: lastDoc,
+        hasMore: snapshot.docs.length >= limit,
+      );
     });
+  }
+
+  Future<MessagePage> getMessagesPage(
+    String roomId, {
+    DocumentSnapshot<Map<String, dynamic>>? lastDoc,
+    int limit = 30,
+  }) async {
+    Query<Map<String, dynamic>> query = _firestore
+        .collection('chat_rooms')
+        .doc(roomId)
+        .collection('messages')
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    if (lastDoc != null) {
+      query = query.startAfterDocument(lastDoc);
+    }
+
+    final snapshot = await query.get();
+    final messages = snapshot.docs
+        .map((doc) => ChatMessage.fromJson(doc.data(), docId: doc.id))
+        .toList();
+    final nextDoc = snapshot.docs.isEmpty ? null : snapshot.docs.last;
+    return MessagePage(
+      messages: messages,
+      lastDoc: nextDoc,
+      hasMore: snapshot.docs.length >= limit,
+    );
   }
 
   Future<ChatRoom?> getChatRoomById(String roomId) async {
@@ -242,21 +290,25 @@ class ChatService {
     });
   }
 
-  Future<void> sendMessage(String roomId, String text) async {
+  Future<void> sendMessage(ChatRoom room, String text) async {
     final userId = _requireUser().uid;
     final trimmedText = text.trim();
     if (trimmedText.isEmpty) {
       return;
     }
 
+    final roomId = room.roomId?.trim() ?? '';
+    if (roomId.isEmpty) {
+      return;
+    }
+
     final now = Timestamp.now();
     final roomRef = _firestore.collection('chat_rooms').doc(roomId);
-    final roomSnapshot = await roomRef.get();
-    final roomData = roomSnapshot.data() ?? {};
-    final sellerId = roomData['sellerId']?.toString();
-    final buyerId = roomData['buyerId']?.toString();
-    final isSeller = sellerId == userId;
-    final isBuyer = buyerId == userId;
+    final isSeller = room.sellerId == userId;
+    final isBuyer = room.buyerId == userId;
+    if (!isSeller && !isBuyer) {
+      return;
+    }
 
     String? targetUnreadField;
     if (isSeller) {
@@ -307,36 +359,25 @@ class ChatService {
     });
   }
 
-  Future<void> markAsRead(String roomId) async {
-    final userId = _requireUser().uid;
-    final roomRef = _firestore.collection('chat_rooms').doc(roomId);
-    final roomSnapshot = await roomRef.get();
-    final roomData = roomSnapshot.data();
-    if (roomData == null) {
+  Future<void> markAsRead(
+    String roomId, {
+    required bool isSeller,
+    required bool isBuyer,
+  }) async {
+    _requireUser();
+    if (!isSeller && !isBuyer) {
       return;
     }
-
-    final sellerId = roomData['sellerId']?.toString();
-    final buyerId = roomData['buyerId']?.toString();
-    String? unreadField;
-    if (sellerId == userId) {
-      unreadField = 'unreadCountSeller';
-    } else if (buyerId == userId) {
-      unreadField = 'unreadCountBuyer';
-    }
-
+    final roomRef = _firestore.collection('chat_rooms').doc(roomId);
+    final now = Timestamp.now();
     final updates = <String, dynamic>{};
-    if (unreadField != null) {
-      updates[unreadField] = 0;
+    if (isSeller) {
+      updates['unreadCountSeller'] = 0;
+      updates['lastReadAtSeller'] = now;
     }
-    String? lastReadAtField;
-    if (sellerId == userId) {
-      lastReadAtField = 'lastReadAtSeller';
-    } else if (buyerId == userId) {
-      lastReadAtField = 'lastReadAtBuyer';
-    }
-    if (lastReadAtField != null) {
-      updates[lastReadAtField] = Timestamp.now();
+    if (isBuyer) {
+      updates['unreadCountBuyer'] = 0;
+      updates['lastReadAtBuyer'] = now;
     }
     if (updates.isNotEmpty) {
       await roomRef.update(updates);

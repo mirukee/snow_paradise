@@ -42,9 +42,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final int _pageSize = 30;
-  int _messageLimit = 30;
   bool _isFetchingMore = false;
   bool _hasMore = true;
+  DocumentSnapshot<Map<String, dynamic>>? _lastMessageDoc;
+  final List<ChatMessage> _olderMessages = [];
+  String? _activeRoomId;
   Timer? _markAsReadDebounce;
 
   Future<String?> _promptReportReason(BuildContext context) async {
@@ -133,25 +135,93 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     final position = _scrollController.position;
     if (position.pixels >= position.maxScrollExtent - 200) {
+      _loadMoreMessages();
+    }
+  }
+
+  Future<void> _loadMoreMessages() async {
+    if (_isFetchingMore || !_hasMore) {
+      return;
+    }
+    final roomId = _activeRoomId;
+    if (roomId == null || roomId.isEmpty) {
+      return;
+    }
+    if (_lastMessageDoc == null) {
+      return;
+    }
+
+    setState(() {
       _isFetchingMore = true;
+    });
+
+    try {
+      final page = await context.read<ChatService>().getMessagesPage(
+            roomId,
+            lastDoc: _lastMessageDoc,
+            limit: _pageSize,
+          );
+      if (!mounted) return;
+      if (page.messages.isNotEmpty) {
+        _appendOlderMessages(page.messages);
+      }
+      _lastMessageDoc = page.lastDoc;
+      _hasMore = page.hasMore;
+    } catch (_) {
+      _hasMore = false;
+    } finally {
+      if (!mounted) return;
       setState(() {
-        _messageLimit += _pageSize;
-      });
-      Future.delayed(const Duration(milliseconds: 300), () {
         _isFetchingMore = false;
       });
     }
   }
 
+  String _messageKey(ChatMessage message) {
+    if (message.id.isNotEmpty) {
+      return message.id;
+    }
+    return '${message.senderId}|${message.createdAt.millisecondsSinceEpoch}|${message.text}';
+  }
+
+  void _appendOlderMessages(List<ChatMessage> messages) {
+    final existingKeys =
+        _olderMessages.map(_messageKey).toSet();
+    for (final message in messages) {
+      final key = _messageKey(message);
+      if (!existingKeys.add(key)) {
+        continue;
+      }
+      _olderMessages.add(message);
+    }
+  }
+
+  List<ChatMessage> _mergeMessages(
+    List<ChatMessage> latestMessages,
+    List<ChatMessage> olderMessages,
+  ) {
+    final merged = <String, ChatMessage>{};
+    for (final message in olderMessages) {
+      merged[_messageKey(message)] = message;
+    }
+    for (final message in latestMessages) {
+      merged[_messageKey(message)] = message;
+    }
+    final values = merged.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return values;
+  }
+
   void _markLatestAsReadIfNeeded({
-    required AsyncSnapshot<List<ChatMessage>> snapshot,
     required List<ChatMessage> messages,
     required String? currentUserId,
     required String? roomId,
     required Timestamp? lastReadAt,
     required int? unreadCount,
+    required bool isSeller,
+    required bool isBuyer,
   }) {
-    if (!snapshot.hasData || messages.isEmpty) {
+    if (messages.isEmpty) {
       return;
     }
     if (roomId == null || roomId.isEmpty) {
@@ -171,11 +241,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _scheduleMarkAsRead(roomId);
+      _scheduleMarkAsRead(
+        roomId,
+        isSeller: isSeller,
+        isBuyer: isBuyer,
+      );
     });
   }
 
-  Future<void> _sendMessage() async {
+  Future<void> _sendMessage(ChatRoom room) async {
     final text = _controller.text.trim();
     if (text.isEmpty) {
       return;
@@ -190,11 +264,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      final roomId = widget.room.roomId;
-      if (roomId == null || roomId.isEmpty) {
-        throw StateError('채팅방 정보를 찾을 수 없습니다.');
-      }
-      await context.read<ChatService>().sendMessage(roomId, text);
+      await context.read<ChatService>().sendMessage(room, text);
       _controller.clear();
     } catch (_) {
       if (!mounted) return;
@@ -277,11 +347,19 @@ class _ChatScreenState extends State<ChatScreen> {
     return isSeller ? room.unreadCountSeller : room.unreadCountBuyer;
   }
 
-  void _scheduleMarkAsRead(String roomId) {
+  void _scheduleMarkAsRead(
+    String roomId, {
+    required bool isSeller,
+    required bool isBuyer,
+  }) {
     _markAsReadDebounce?.cancel();
     _markAsReadDebounce = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      context.read<ChatService>().markAsRead(roomId);
+      context.read<ChatService>().markAsRead(
+            roomId,
+            isSeller: isSeller,
+            isBuyer: isBuyer,
+          );
     });
   }
 
@@ -353,7 +431,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                     // 입력 영역
-                    _buildInputArea(),
+                    _buildInputArea(room),
                   ],
                 ),
               ),
@@ -712,12 +790,15 @@ class _ChatScreenState extends State<ChatScreen> {
     ImageProvider avatarImage,
     ChatRoom? room,
   ) {
-    return StreamBuilder<List<ChatMessage>>(
+    if (roomId != null && roomId.isNotEmpty) {
+      _activeRoomId = roomId;
+    }
+    return StreamBuilder<MessagePage>(
       stream: roomId == null || roomId.isEmpty
-          ? Stream<List<ChatMessage>>.empty()
+          ? Stream<MessagePage>.empty()
           : context
               .read<ChatService>()
-              .getMessages(roomId, limit: _messageLimit),
+              .watchLatestMessages(roomId, limit: _pageSize),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -736,19 +817,30 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }
 
-        final messages = snapshot.data ?? [];
+        final page = snapshot.data;
+        final latestMessages = page?.messages ?? [];
+        if (_lastMessageDoc == null && page != null) {
+          _lastMessageDoc = page.lastDoc;
+          _hasMore = page.hasMore;
+        }
+
+        final messages = _mergeMessages(latestMessages, _olderMessages);
         final myLastReadAt = _resolveMyLastReadAt(room, currentUserId);
         final otherLastReadAt = _resolveOtherLastReadAt(room, currentUserId);
         final myUnreadCount = _resolveMyUnreadCount(room, currentUserId);
+        final isSeller =
+            room != null && currentUserId != null && room.sellerId == currentUserId;
+        final isBuyer =
+            room != null && currentUserId != null && room.buyerId == currentUserId;
         _markLatestAsReadIfNeeded(
-          snapshot: snapshot,
           messages: messages,
           currentUserId: currentUserId,
           roomId: roomId,
           lastReadAt: myLastReadAt,
           unreadCount: myUnreadCount,
+          isSeller: isSeller,
+          isBuyer: isBuyer,
         );
-        _hasMore = messages.length >= _messageLimit;
 
         if (messages.isEmpty) {
           return const Center(
@@ -1004,7 +1096,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// 입력 영역
-  Widget _buildInputArea() {
+  Widget _buildInputArea(ChatRoom room) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       decoration: const BoxDecoration(
@@ -1057,14 +1149,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   fontSize: 14,
                   color: textDark,
                 ),
-                onSubmitted: (_) => _sendMessage(),
+                onSubmitted: (_) => _sendMessage(room),
               ),
             ),
           ),
           const SizedBox(width: 12),
           // 전송 버튼
           GestureDetector(
-            onTap: _sendMessage,
+            onTap: () => _sendMessage(room),
             child: Container(
               width: 36,
               height: 36,

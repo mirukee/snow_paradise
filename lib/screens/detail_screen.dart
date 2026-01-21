@@ -1111,7 +1111,9 @@ class _DetailScreenState extends State<DetailScreen> {
                     ),
                   ),
                 );
-              } catch (_) {
+              } catch (error, stackTrace) {
+                debugPrint('채팅방 생성 실패: $error');
+                debugPrint('$stackTrace');
                 if (context.mounted) {
                   navigator.pop();
                   messenger.showSnackBar(

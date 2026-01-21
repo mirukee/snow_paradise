@@ -105,21 +105,27 @@ class ChatRoom {
 }
 
 class ChatMessage {
+  final String id;
   final String senderId;
   final String text;
   final Timestamp createdAt;
   final bool isRead;
 
   ChatMessage({
+    this.id = '',
     required this.senderId,
     required this.text,
     required this.createdAt,
     required this.isRead,
   });
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+  factory ChatMessage.fromJson(
+    Map<String, dynamic> json, {
+    String? docId,
+  }) {
     final rawIsRead = json['isRead'];
     return ChatMessage(
+      id: docId ?? json['id']?.toString() ?? '',
       senderId: json['senderId']?.toString() ?? '',
       text: json['text']?.toString() ?? '',
       createdAt: _timestampFrom(json['createdAt']),
@@ -137,4 +143,16 @@ class ChatMessage {
       'isRead': isRead,
     };
   }
+}
+
+class MessagePage {
+  final List<ChatMessage> messages;
+  final DocumentSnapshot<Map<String, dynamic>>? lastDoc;
+  final bool hasMore;
+
+  const MessagePage({
+    required this.messages,
+    required this.lastDoc,
+    required this.hasMore,
+  });
 }

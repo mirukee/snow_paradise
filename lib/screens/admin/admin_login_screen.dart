@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/admin_auth_provider.dart';
+import '../../providers/user_service.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -16,6 +17,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AdminAuthProvider>();
+    final currentUser = context.watch<UserService>().currentUser;
+    final isAuthenticated = currentUser != null;
 
     return Scaffold(
       body: Center(
@@ -33,6 +36,41 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       'Snow Paradise Admin',
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
+                    const SizedBox(height: 12),
+                    if (!isAuthenticated) ...[
+                      const Text(
+                        '관리자 계정으로 먼저 로그인해주세요.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: authProvider.isLoading
+                              ? null
+                              : () async {
+                                  await context
+                                      .read<UserService>()
+                                      .loginWithGoogle();
+                                },
+                          child: const Text('Google 로그인'),
+                        ),
+                      ),
+                    ] else ...[
+                      Text(
+                        '로그인: ${currentUser?.email ?? currentUser?.displayName ?? '관리자'}',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: authProvider.isLoading
+                            ? null
+                            : () async {
+                                await context.read<UserService>().signOut();
+                              },
+                        child: const Text('로그아웃'),
+                      ),
+                    ],
                     const SizedBox(height: 32),
                     TextFormField(
                       controller: _passwordController,
@@ -42,6 +80,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         prefixIcon: Icon(Icons.lock),
                       ),
                       obscureText: true,
+                      enabled: isAuthenticated && !authProvider.isLoading,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter password';
@@ -55,7 +94,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: authProvider.isLoading ? null : _handleLogin,
+                        onPressed: authProvider.isLoading || !isAuthenticated
+                            ? null
+                            : _handleLogin,
                         child: authProvider.isLoading
                             ? const CircularProgressIndicator()
                             : const Text('Login'),
@@ -80,7 +121,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid Password')),
+        SnackBar(
+          content: Text(
+            context.read<AdminAuthProvider>().errorMessage ??
+                'Invalid Password',
+          ),
+        ),
       );
     }
   }

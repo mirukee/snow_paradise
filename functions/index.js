@@ -1,5 +1,6 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 
 admin.initializeApp();
 
@@ -50,6 +51,37 @@ function toNonNegativeInt(value) {
     return 0;
   }
   return value < 0 ? 0 : Math.floor(value);
+}
+
+async function applyUnreadDelta(userId, delta) {
+  const trimmedUserId = toCleanString(userId);
+  if (!trimmedUserId || !delta) {
+    return;
+  }
+  const userRef = db.collection("users").doc(trimmedUserId);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(userRef);
+    if (!snapshot.exists) {
+      return;
+    }
+    const current = toNonNegativeInt(snapshot.get("unreadTotal"));
+    const next = current + delta;
+    transaction.update(userRef, {
+      unreadTotal: next < 0 ? 0 : next,
+      lastUnreadUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+function toPasswordString(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+}
+
+function hashPassword(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
 }
 
 exports.sendChatNotification = functions.firestore
@@ -452,3 +484,99 @@ exports.updateChatCountOnFirstMessage = functions.firestore
 
     return null;
   });
+
+exports.updateUnreadTotalOnRoomWrite = functions.firestore
+  .document("chat_rooms/{roomId}")
+  .onWrite(async (change, context) => {
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+
+    const sellerId = toCleanString(after?.sellerId ?? before?.sellerId);
+    const buyerId = toCleanString(after?.buyerId ?? before?.buyerId);
+    if (!sellerId && !buyerId) {
+      return null;
+    }
+
+    const beforeSeller = toNonNegativeInt(before?.unreadCountSeller);
+    const beforeBuyer = toNonNegativeInt(before?.unreadCountBuyer);
+    const afterSeller = toNonNegativeInt(after?.unreadCountSeller);
+    const afterBuyer = toNonNegativeInt(after?.unreadCountBuyer);
+
+    const sellerDelta = afterSeller - beforeSeller;
+    const buyerDelta = afterBuyer - beforeBuyer;
+
+    const tasks = [];
+    if (sellerId && sellerDelta) {
+      tasks.push(applyUnreadDelta(sellerId, sellerDelta));
+    }
+    if (buyerId && buyerId !== sellerId && buyerDelta) {
+      tasks.push(applyUnreadDelta(buyerId, buyerDelta));
+    }
+
+    await Promise.all(tasks);
+    return null;
+  });
+
+exports.verifyAdminPassword = functions.https.onCall(async (data, context) => {
+  const password = toPasswordString(data?.password);
+  if (!password) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "비밀번호가 필요합니다."
+    );
+  }
+
+  if (!context.auth?.uid) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "관리자 계정으로 먼저 로그인해주세요."
+    );
+  }
+
+  const settingsRef = db.collection("admin").doc("settings");
+  const settingsSnapshot = await settingsRef.get();
+  if (!settingsSnapshot.exists) {
+    throw new functions.https.HttpsError(
+      "not-found",
+      "관리자 설정을 찾을 수 없습니다."
+    );
+  }
+
+  const settings = settingsSnapshot.data() || {};
+  const storedHash = toCleanString(settings.passwordHash);
+  const legacyPassword = toCleanString(settings.password);
+  const inputHash = hashPassword(password);
+
+  let isValid = false;
+  if (storedHash) {
+    isValid = storedHash === inputHash;
+  } else if (legacyPassword) {
+    isValid = legacyPassword === password;
+  }
+
+  if (!isValid) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "비밀번호가 일치하지 않습니다."
+    );
+  }
+
+  if (!storedHash) {
+    const updates = {
+      passwordHash: inputHash,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (legacyPassword) {
+      updates.password = admin.firestore.FieldValue.delete();
+    }
+    await settingsRef.set(updates, { merge: true });
+  }
+
+  await admin
+    .auth()
+    .setCustomUserClaims(context.auth.uid, { admin: true });
+
+  return {
+    success: true,
+  };
+});

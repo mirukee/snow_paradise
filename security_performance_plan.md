@@ -2,208 +2,68 @@
 
 분석된 보안 이슈와 서버 부하 위험 요소를 해결하기 위한 구현 계획입니다.
 
-## User Review Required
+## 현황 요약 (업데이트)
 
-> [!CAUTION]
-> **Firestore Security Rules가 존재하지 않습니다.** 현재 상태에서는 모든 사용자가 모든 데이터에 접근할 수 있습니다. 즉시 조치가 필요합니다.
+- [DONE] `firestore.rules` 작성 및 배포 완료 (users 제한, public_profiles 공개 분리, admin 차단 포함).
+- [DONE] 공개 프로필 분리 및 백필 스크립트 완료 (`public_profiles`).
+- [DONE] `likeCount`/`chatCount` 업데이트를 Cloud Functions로 전환.
+- [DONE] Wishlist N+1 배치 조회, 알림 일괄 삭제 분할 처리, 검색 debounce + 인기 검색어 캐싱.
+- [DONE] 관리자 상품 목록 페이징 적용.
+- [DONE] 검색/카테고리/홈 전환 시 페이징 리스트 소실 이슈 수정 (라우트 복귀 리프레시, 검색 자동 추가 로드).
+- [DONE] Firestore Web `onSnapshot` 취소 오류 완화 (채팅 스트림 재사용).
 
-> [!WARNING]
-> **관리자 비밀번호가 클라이언트에 노출됩니다.** `admin/settings` 문서를 읽을 수 있는 사용자는 비밀번호를 볼 수 있습니다.
-
-**결정이 필요한 사항:**
-1. Cloud Functions 도입 여부 (관리자 인증 서버사이드 이전)
-2. 보안 규칙만 먼저 적용할지, 전체 리팩토링을 진행할지
+**미해결/결정 필요:**
+1. Storage Rules 점검 및 배포 경로 정리 (현재 repo에 rules 파일 없음).
 
 ---
 
-## Phase 1: Firestore Security Rules (Critical - 즉시 적용)
+## Phase 1: Firestore Security Rules (Completed)
 
-### [NEW] [firestore.rules](file:///Users/gimdoyun/Documents/snow_paradise/firestore.rules)
+### [DONE] `firestore.rules` 작성 및 배포
 
-Firestore 보안 규칙을 생성하여 다음을 적용합니다:
+적용 내용 요약:
+- `users`: 본인만 read/write, `isAdmin`/`isBanned` 변경 제한.
+- `public_profiles`: 누구나 read, 본인만 create/update, 허용 필드 제한.
+- `products`: create 시 `sellerId == auth.uid`, update는 seller(카운트 변경 금지) 또는 admin.
+- `admin`: read/write 전면 차단.
+- `reports`: create만 허용.
+- `search_keywords`, `metadata`, `notices`, `terms`는 read 중심.
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    // 헬퍼 함수
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isOwner(uid) {
-      return isAuthenticated() && request.auth.uid == uid;
-    }
-    
-    // 1. users 컬렉션
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || 
-                      (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isBanned']));
-      allow delete: if isOwner(userId);
-      
-      // 사용자별 서브컬렉션
-      match /likes/{productId} {
-        allow read, write: if isOwner(userId);
-      }
-      
-      match /blocked_users/{blockedId} {
-        allow read, write: if isOwner(userId);
-      }
-      
-      match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId);
-      }
-    }
-    
-    // 2. products 컬렉션
-    match /products/{productId} {
-      allow read: if true;  // 상품은 누구나 조회 가능
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && 
-                      (resource.data.sellerId == request.auth.uid || 
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'chatCount']));
-      allow delete: if isAuthenticated() && resource.data.sellerId == request.auth.uid;
-    }
-    
-    // 3. chat_rooms 컬렉션
-    match /chat_rooms/{roomId} {
-      allow read: if isAuthenticated() && 
-                    (resource.data.sellerId == request.auth.uid || 
-                     resource.data.buyerId == request.auth.uid);
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && 
-                      request.auth.uid in resource.data.participants;
-      
-      match /messages/{messageId} {
-        allow read, write: if isAuthenticated() && 
-                             request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.participants;
-      }
-    }
-    
-    // 4. admin 컬렉션 - Critical Security Fix
-    match /admin/{document=**} {
-      allow read: if false;  // 클라이언트에서 절대 읽기 금지!
-      allow write: if false; // 클라이언트에서 절대 쓰기 금지!
-    }
-    
-    // 5. reports 컬렉션
-    match /reports/{reportId} {
-      allow read: if false;  // 관리자만 (Cloud Functions 또는 Admin SDK)
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
-    }
-    
-    // 6. search_keywords 컬렉션
-    match /search_keywords/{keyword} {
-      allow read: if true;
-      allow write: if isAuthenticated();
-    }
-    
-    // 7. metadata 컬렉션 (브랜드 등)
-    match /metadata/{docId} {
-      allow read: if true;
-      allow write: if false;  // 관리자만 (Cloud Functions)
-    }
-    
-    // 8. notices, terms 컬렉션
-    match /notices/{noticeId} {
-      allow read: if true;
-      allow write: if false;  // 관리자만
-    }
-    
-    match /terms/{termId} {
-      allow read: if true;
-      allow write: if false;  // 관리자만
-    }
-  }
-}
-```
-
-**배포 방법:**
+**배포 방법 (완료됨):**
 ```bash
 firebase deploy --only firestore:rules
 ```
 
 ---
 
-## Phase 2: 관리자 인증 서버사이드 이전 (High Priority)
+## Phase 2: 관리자 인증 서버사이드 이전 (Completed)
 
-현재 클라이언트에서 비밀번호를 비교하는 방식을 Cloud Functions로 이전합니다.
+클라이언트에서 `admin/settings`를 읽어 비밀번호를 비교하던 방식을 Cloud Functions로 이전했습니다.
 
-### [NEW] [functions/src/admin.ts](file:///Users/gimdoyun/Documents/snow_paradise/functions/src/admin.ts)
+### [DONE] `functions/index.js` - `verifyAdminPassword`
 
-```typescript
-import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
-import * as crypto from 'crypto';
+- `admin/settings`의 `passwordHash`(sha256) 비교
+- 기존 `password`(평문)가 남아있으면 **성공 시 해시로 마이그레이션**하고 평문 삭제
+- 성공 시 `Custom Claims`에 `admin: true` 설정
+- **Firebase Auth 로그인 상태 필요**
 
-export const verifyAdminPassword = functions.https.onCall(async (data, context) => {
-  const { password } = data;
-  
-  if (!password || typeof password !== 'string') {
-    throw new functions.https.HttpsError('invalid-argument', '비밀번호가 필요합니다.');
-  }
-  
-  const settingsDoc = await admin.firestore().collection('admin').doc('settings').get();
-  
-  if (!settingsDoc.exists) {
-    throw new functions.https.HttpsError('not-found', '관리자 설정을 찾을 수 없습니다.');
-  }
-  
-  const storedHash = settingsDoc.data()?.passwordHash;
-  const inputHash = crypto.createHash('sha256').update(password).digest('hex');
-  
-  if (storedHash !== inputHash) {
-    throw new functions.https.HttpsError('permission-denied', '비밀번호가 일치하지 않습니다.');
-  }
-  
-  // Custom Claim 설정 (선택사항)
-  if (context.auth?.uid) {
-    await admin.auth().setCustomUserClaims(context.auth.uid, { admin: true });
-  }
-  
-  return { success: true };
-});
-```
+### [DONE] `lib/providers/admin_auth_provider.dart`
 
-### [MODIFY] [admin_auth_provider.dart](file:///Users/gimdoyun/Documents/snow_paradise/lib/providers/admin_auth_provider.dart)
+- `httpsCallable('verifyAdminPassword')` 호출
+- 성공 시 `getIdToken(true)`로 토큰/클레임 갱신
+- 에러 메시지 노출 및 로딩 상태 유지
 
-```dart
-// Cloud Functions 호출 방식으로 변경
-Future<bool> login(String password) async {
-  _isLoading = true;
-  notifyListeners();
-  
-  try {
-    final callable = FirebaseFunctions.instance.httpsCallable('verifyAdminPassword');
-    final result = await callable.call({'password': password});
-    
-    if (result.data['success'] == true) {
-      _isLoggedIn = true;
-      notifyListeners();
-      return true;
-    }
-    return false;
-  } catch (e) {
-    debugPrint('Admin login error: $e');
-    return false;
-  } finally {
-    _isLoading = false;
-    notifyListeners();
-  }
-}
-```
+### [DONE] `firestore.rules`
+
+- `isAdmin()`에 `request.auth.token.admin == true` 조건 추가
 
 ---
 
-## Phase 3: 성능 개선 (Medium Priority)
+## Phase 3: 성능 개선 (Completed)
 
-### 3.1 Wishlist N+1 쿼리 개선
+### 3.1 Wishlist N+1 쿼리 개선 (DONE)
 
-#### [MODIFY] [product_service.dart](file:///Users/gimdoyun/Documents/snow_paradise/lib/providers/product_service.dart)
+#### [MODIFY] `lib/providers/product_service.dart`
 
 `getWishlistProducts` 메서드를 배치 쿼리 방식으로 개선:
 
@@ -228,9 +88,9 @@ Future<List<Product>> getWishlistProducts(String uid) async {
 }
 ```
 
-### 3.2 알림 일괄 처리 개선
+### 3.2 알림 일괄 처리 개선 (DONE)
 
-#### [MODIFY] [notification_provider.dart](file:///Users/gimdoyun/Documents/snow_paradise/lib/providers/notification_provider.dart)
+#### [MODIFY] `lib/providers/notification_provider.dart`
 
 Batch 500개 제한 고려 및 분할 처리:
 
@@ -261,9 +121,9 @@ List<List<T>> _splitIntoChunks<T>(List<T> list, int chunkSize) {
 }
 ```
 
-### 3.3 자동완성 로컬 순회 개선
+### 3.3 자동완성 로컬 순회 개선 (DONE)
 
-#### [MODIFY] [product_service.dart](file:///Users/gimdoyun/Documents/snow_paradise/lib/providers/product_service.dart)
+#### [MODIFY] `lib/providers/product_service.dart`
 
 현재 `getSearchSuggestionsWithType`는 매 키 입력마다 브랜드 목록 + _productList(최대 200개)를 순회합니다.
 
@@ -325,9 +185,9 @@ Future<List<String>> _getCachedPopularKeywords() async {
 
 ---
 
-### 3.4 관리자 전체 상품 구독 개선
+### 3.4 관리자 전체 상품 구독 개선 (DONE)
 
-#### [MODIFY] [product_service.dart](file:///Users/gimdoyun/Documents/snow_paradise/lib/providers/product_service.dart)
+#### [MODIFY] `lib/providers/product_service.dart`
 
 현재 관리자 모드는 `limit` 없이 전체 상품을 실시간 구독합니다.
 
@@ -400,6 +260,65 @@ NotificationListener<ScrollNotification>(
 )
 ```
 
+### 3.5 좋아요/채팅 카운트 업데이트 전환 (DONE)
+
+- `likeCount`, `chatCount`는 Cloud Functions에서 증감 처리.
+- 클라이언트는 카운트 직접 업데이트를 수행하지 않음.
+
+### 3.6 검색/카테고리/홈 페이징 동기화 이슈 보완 (DONE)
+
+- 라우트 복귀 시 홈 페이징 리프레시.
+- 검색 결과가 비어있을 때 자동으로 추가 페이지 로드.
+- Firestore Web `onSnapshot` 오류 완화를 위해 채팅 스트림 재사용.
+
+### 3.7 채팅 메시지 로딩 최적화 (DONE)
+
+- `sendMessage`/`markAsRead`에서 불필요한 `roomRef.get()` 제거.
+- 메시지 로딩을 `startAfterDocument` 기반 페이지네이션으로 전환.
+
+### 3.8 채팅 미읽음 총합 집계 (DONE)
+
+- `users.unreadTotal`을 Cloud Functions에서 증감.
+- 클라이언트는 사용자 문서 스트림으로 뱃지 표시.
+
+---
+
+## 이슈 기록: 채팅방 생성 Permission Denied (DONE)
+
+### 증상
+- 게스트/구글 로그인 모두에서 채팅방 생성 실패.
+- 콘솔 로그:  
+  - `채팅방 조회 실패: [cloud_firestore/permission-denied] Missing or insufficient permissions.`
+  - `채팅방 생성 실패: [cloud_firestore/permission-denied] Missing or insufficient permissions.`
+
+### 원인
+**`firestore.rules`의 `chat_rooms` list 규칙에서 잘못된 구문 사용:**
+
+```javascript
+// ❌ 잘못된 코드 - Firestore Rules에서 지원하지 않는 구문
+allow list: if isAuthenticated() &&
+    request.query.where('participants', 'array-contains', request.auth.uid);
+```
+
+`request.query.where(...)`는 **Firestore Security Rules에서 지원하지 않는 문법**입니다.
+지원되는 쿼리 검증 속성: `request.query.limit`, `request.query.offset`, `request.query.orderBy` 등.
+`where` 절의 내용을 직접 검증하는 것은 불가능하며, 이 잘못된 구문으로 인해 모든 list 쿼리가 거부되었습니다.
+
+### 해결
+```javascript
+// ✅ 수정된 코드
+allow list: if isAuthenticated();
+```
+
+**보안 유지:**
+- `get` 규칙에서 `isChatParticipant(resource.data)`로 실제 문서 접근 시 참가자 검증 수행.
+- 앱 코드에서 `where('participants', arrayContains: buyerId)` 쿼리 사용으로 자신의 채팅방만 조회됨.
+
+### 배포
+```bash
+firebase deploy --only firestore:rules
+# ✔ Deploy complete! (2026-01-22)
+
 ---
 
 ## Verification Plan
@@ -419,18 +338,19 @@ flutter build web
 1. 보안 규칙 배포 후 일반 사용자가 `admin/settings` 접근 시 **Permission Denied** 확인
 2. 관리자 로그인 기능 정상 작동 확인
 3. 채팅/좋아요/알림 기능 정상 작동 확인
+4. 검색/카테고리 전환 후 홈 복귀 시 상품 리스트 유지 확인
 
 ---
 
-## 우선순위 정리
+## 우선순위 정리 (현행)
 
-| 순서 | 작업 | 예상 시간 | 위험도 |
-|------|------|----------|--------|
-| 1 | Firestore Security Rules 생성 및 배포 | 30분 | Critical |
-| 2 | 관리자 비밀번호 해시화 | 15분 | Critical |
-| 3 | Cloud Functions 관리자 인증 | 1시간 | High |
-| 4 | Wishlist 쿼리 최적화 | 30분 | Medium |
-| 5 | 알림 Batch 분할 처리 | 20분 | Medium |
-| 6 | 자동완성 Debounce + 인기검색어 캐싱 | 40분 | Medium |
-| 7 | 관리자 상품 목록 페이징 적용 | 30분 | Medium |
-
+| 순서 | 작업 | 상태 | 위험도 |
+|------|------|------|--------|
+| 1 | Firestore Security Rules 생성 및 배포 | DONE | Critical |
+| 2 | 관리자 비밀번호 해시화 | DONE | Critical |
+| 3 | Cloud Functions 관리자 인증 | DONE | High |
+| 4 | Wishlist 쿼리 최적화 | DONE | Medium |
+| 5 | 알림 Batch 분할 처리 | DONE | Medium |
+| 6 | 자동완성 Debounce + 인기검색어 캐싱 | DONE | Medium |
+| 7 | 관리자 상품 목록 페이징 적용 | DONE | Medium |
+| 8 | 검색/홈 페이징 동기화 보완 | DONE | Medium |

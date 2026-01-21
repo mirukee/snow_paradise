@@ -11,9 +11,15 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid))
-              .data
-              .isAdmin == true;
+          (request.auth.token.admin == true ||
+              get(/databases/$(database)/documents/users/$(request.auth.uid))
+                  .data
+                  .isAdmin == true);
+    }
+
+    function isChatParticipant(data) {
+      return data.participants is list &&
+          request.auth.uid in data.participants;
     }
 
     function countValue(data, field) {
@@ -89,12 +95,17 @@ service cloud.firestore {
 
     // 4. chat_rooms 컬렉션
     match /chat_rooms/{roomId} {
-      allow read: if isAuthenticated() &&
-          (resource.data.sellerId == request.auth.uid ||
-              resource.data.buyerId == request.auth.uid);
-      allow create: if isAuthenticated();
+      allow get: if isAuthenticated() &&
+          isChatParticipant(resource.data);
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+          request.resource.data.buyerId == request.auth.uid ||
+          request.resource.data.sellerId == request.auth.uid ||
+          (request.resource.data.participants is list &&
+              request.auth.uid in request.resource.data.participants)
+      );
       allow update: if isAuthenticated() &&
-          request.auth.uid in resource.data.participants;
+          isChatParticipant(resource.data);
 
       match /messages/{messageId} {
         allow read, write: if isAuthenticated() &&

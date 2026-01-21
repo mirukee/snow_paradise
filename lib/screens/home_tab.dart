@@ -12,6 +12,7 @@ import 'detail_screen.dart';
 import 'search_screen.dart';
 import 'notification_screen.dart';
 import '../providers/main_tab_provider.dart';
+import '../utils/route_observer.dart';
 
 const _secondaryColor = Color(0xFF101922);
 const _iceBlue = Color(0xFF00AEEF);
@@ -25,7 +26,7 @@ class HomeTab extends StatefulWidget {
   State<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends State<HomeTab> {
+class _HomeTabState extends State<HomeTab> with RouteAware {
   static const _homeQueryKey = 'home';
   final ScrollController _scrollController = ScrollController();
   bool _isAutoFetching = false;
@@ -37,10 +38,36 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    if (!mounted) return;
+    final isActiveTab =
+        context.read<MainTabProvider>().currentIndex == 0;
+    if (!isActiveTab) {
+      return;
+    }
+    final productService = context.read<ProductService>();
+    if (productService.activeQueryKey == _homeQueryKey &&
+        productService.paginatedProducts.isNotEmpty) {
+      return;
+    }
+    _fetchHomeProducts(productService, force: true);
   }
 
   void _onScroll() {
@@ -112,7 +139,7 @@ class _HomeTabState extends State<HomeTab> {
         !_isAutoFetching) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _ensureHomeProducts(context.read<ProductService>());
+        _fetchHomeProducts(context.read<ProductService>(), force: false);
       });
     }
     final products = productService.paginatedProducts;
@@ -398,8 +425,11 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  void _ensureHomeProducts(ProductService productService) {
-    if (_isAutoFetching) return;
+  void _fetchHomeProducts(
+    ProductService productService, {
+    required bool force,
+  }) {
+    if (_isAutoFetching && !force) return;
     _isAutoFetching = true;
     productService
         .fetchProductsPaginated(contextKey: _homeQueryKey)

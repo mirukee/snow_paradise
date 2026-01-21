@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/chat_model.dart';
 import '../models/product.dart';
-import '../models/user_model.dart';
+import '../models/public_profile.dart';
 import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../services/chat_service.dart';
@@ -233,7 +233,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   String _resolveOtherName(
     String? currentUserId, {
-    UserModel? userModel,
+    PublicProfile? userModel,
   }) {
     final nickname = userModel?.nickname.trim();
     if (nickname != null && nickname.isNotEmpty) {
@@ -285,8 +285,8 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  ImageProvider _resolveProfileImage(UserModel? userModel) {
-    final profileImageUrl = userModel?.profileImageUrl?.trim();
+  ImageProvider _resolveProfileImage(PublicProfile? profile) {
+    final profileImageUrl = profile?.profileImageUrl?.trim();
     if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
       return NetworkImage(profileImageUrl);
     }
@@ -305,12 +305,14 @@ class _ChatScreenState extends State<ChatScreen> {
       stream: otherUserId == null || otherUserId.isEmpty
           ? Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
           : FirebaseFirestore.instance
-              .collection('users')
+              .collection('public_profiles')
               .doc(otherUserId)
               .snapshots(),
       builder: (context, userSnapshot) {
         final data = userSnapshot.data?.data();
-        final otherUser = data == null ? null : UserModel.fromJson(data);
+        final otherUser = data == null
+            ? null
+            : PublicProfile.fromJson(data, docId: otherUserId);
         final otherName =
             _resolveOtherName(currentUserId, userModel: otherUser);
         final avatarImage = _resolveProfileImage(otherUser);

@@ -36,6 +36,8 @@ class MyScreen extends StatefulWidget {
 
 class _MyScreenState extends State<MyScreen> {
   _SalesTab _selectedTab = _SalesTab.selling;
+  final GlobalKey _salesSectionKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
 
   Stream<List<Product>> _sellerProductsStream(String uid) {
     final trimmedUid = uid.trim();
@@ -123,6 +125,24 @@ class _MyScreenState extends State<MyScreen> {
     });
   }
 
+  void _openSalesSection({_SalesTab tab = _SalesTab.selling}) {
+    if (_selectedTab != tab) {
+      setState(() {
+        _selectedTab = tab;
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final targetContext = _salesSectionKey.currentContext;
+      if (targetContext == null) return;
+      Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+        alignment: 0.05,
+      );
+    });
+  }
+
   Future<void> _handleStatusChange(
     Product product,
     ProductStatus newStatus,
@@ -206,6 +226,56 @@ class _MyScreenState extends State<MyScreen> {
     }
 
     await _handleStatusChange(product, selectedStatus);
+  }
+
+  Future<void> _confirmDeleteProduct(
+    BuildContext context,
+    Product product,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('상품 삭제'),
+        content: const Text('정말 이 상품을 삭제하시겠어요? 삭제 후 복구할 수 없습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final docId = product.docId?.trim() ?? '';
+    if (docId.isEmpty) {
+      _showSnackBar(context, '상품 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    try {
+      await context.read<ProductService>().deleteProduct(
+            docId,
+            product.imageUrl,
+          );
+      if (!mounted) return;
+      _showSnackBar(context, '상품이 삭제되었습니다.');
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(context, '상품 삭제에 실패했어요.');
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -465,6 +535,7 @@ class _MyScreenState extends State<MyScreen> {
                     ),
                   ),
                   body: SingleChildScrollView(
+                    controller: _scrollController,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -503,14 +574,11 @@ class _MyScreenState extends State<MyScreen> {
                                   context,
                                   icon: Icons.receipt_long,
                                   label: '판매내역',
-                                  count: sellingProducts.length,
+                                  count: userProducts.length,
                                   iconColor: _iceBlue,
                                   iconBackground: const Color(0xFFE8F4FF),
                                   onTap: () {
-                                    _showSnackBar(
-                                      context,
-                                      '판매중 탭에서 확인하세요.',
-                                    );
+                                    _openSalesSection();
                                   },
                                 ),
                               ),
@@ -874,6 +942,7 @@ class _MyScreenState extends State<MyScreen> {
             : '판매중 상품이 없습니다.';
 
     return Container(
+      key: _salesSectionKey,
       decoration: BoxDecoration(
         color: _surfaceColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -1056,10 +1125,18 @@ class _MyScreenState extends State<MyScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        IconButton(
-                          onPressed: () {
-                            _showSnackBar(context, '상품 메뉴는 준비 중입니다.');
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'delete') {
+                              _confirmDeleteProduct(context, product);
+                            }
                           },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('삭제'),
+                            ),
+                          ],
                           icon: const Icon(
                             Icons.more_vert,
                             size: 20,

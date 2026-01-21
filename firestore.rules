@@ -1,0 +1,143 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid))
+              .data
+              .isAdmin == true;
+    }
+
+    function countValue(data, field) {
+      return data[field] is int ? data[field] : 0;
+    }
+
+    function publicProfileFields() {
+      return ['uid', 'nickname', 'profileImageUrl', 'createdAt', 'updatedAt'];
+    }
+
+    function countsUnchanged() {
+      return countValue(request.resource.data, 'likeCount') ==
+          countValue(resource.data, 'likeCount') &&
+          countValue(request.resource.data, 'chatCount') ==
+          countValue(resource.data, 'chatCount');
+    }
+
+    // 1. users 컬렉션 (개인 정보)
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) &&
+          request.resource.data.uid == request.auth.uid;
+      allow update: if (isOwner(userId) &&
+          request.resource.data.uid == request.auth.uid &&
+          !request.resource.data
+              .diff(resource.data)
+              .affectedKeys()
+              .hasAny(['isAdmin', 'isBanned'])) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+
+      match /likes/{productId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /blocked_users/{blockedId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // 2. public_profiles (공개 프로필)
+    match /public_profiles/{userId} {
+      allow read: if true;
+      allow create: if isOwner(userId) &&
+          request.resource.data.uid == request.auth.uid &&
+          request.resource.data.keys().hasOnly(publicProfileFields());
+      allow update: if isOwner(userId) &&
+          request.resource.data.uid == request.auth.uid &&
+          request.resource.data
+              .diff(resource.data)
+              .affectedKeys()
+              .hasOnly(publicProfileFields());
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // 3. products 컬렉션
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+          request.resource.data.sellerId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+          (resource.data.sellerId == request.auth.uid &&
+            request.resource.data.sellerId == resource.data.sellerId &&
+            countsUnchanged()) ||
+          isAdmin()
+      );
+      allow delete: if isAuthenticated() &&
+          (resource.data.sellerId == request.auth.uid || isAdmin());
+    }
+
+    // 4. chat_rooms 컬렉션
+    match /chat_rooms/{roomId} {
+      allow read: if isAuthenticated() &&
+          (resource.data.sellerId == request.auth.uid ||
+              resource.data.buyerId == request.auth.uid);
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() &&
+          request.auth.uid in resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated() &&
+            request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(roomId))
+                .data
+                .participants;
+      }
+    }
+
+    // 5. admin 컬렉션
+    match /admin/{document=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // 6. reports 컬렉션
+    match /reports/{reportId} {
+      allow read: if false;
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // 7. search_keywords 컬렉션
+    match /search_keywords/{keyword} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 8. metadata 컬렉션
+    match /metadata/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 9. notices, terms 컬렉션
+    match /notices/{noticeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /terms/{termId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

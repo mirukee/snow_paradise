@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/chat_model.dart';
 import '../models/product.dart';
-import '../models/user_model.dart';
+import '../models/public_profile.dart';
 import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../services/chat_service.dart';
@@ -34,6 +34,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
   int _roomLimit = 30;
   bool _isFetchingMore = false;
   bool _hasMore = true;
+  Stream<List<ChatRoom>>? _roomsStream;
+  String? _roomsStreamUserId;
+  int _roomsStreamLimit = 0;
 
   @override
   void initState() {
@@ -57,6 +60,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
       _isFetchingMore = true;
       setState(() {
         _roomLimit += _pageSize;
+        final chatService = context.read<ChatService>();
+        _roomsStream = chatService.getChatRooms(limit: _roomLimit);
+        _roomsStreamLimit = _roomLimit;
       });
       Future.delayed(const Duration(milliseconds: 300), () {
         _isFetchingMore = false;
@@ -92,9 +98,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String _resolveOtherName(
     ChatRoom room,
     String? currentUserId, {
-    UserModel? userModel,
+    PublicProfile? profile,
   }) {
-    final nickname = userModel?.nickname.trim();
+    final nickname = profile?.nickname.trim();
     if (nickname != null && nickname.isNotEmpty) {
       return nickname;
     }
@@ -114,12 +120,31 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return isSeller ? room.buyerId : room.sellerId;
   }
 
-  ImageProvider _resolveProfileImage(UserModel? userModel) {
-    final profileImageUrl = userModel?.profileImageUrl?.trim();
+  ImageProvider _resolveProfileImage(PublicProfile? profile) {
+    final profileImageUrl = profile?.profileImageUrl?.trim();
     if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
       return NetworkImage(profileImageUrl);
     }
     return const AssetImage('assets/images/user_default.png');
+  }
+
+  void _syncRoomsStream(
+    ChatService chatService,
+    String? currentUserId,
+  ) {
+    if (currentUserId == null || currentUserId.isEmpty) {
+      _roomsStream = null;
+      _roomsStreamUserId = null;
+      _roomsStreamLimit = 0;
+      return;
+    }
+    if (_roomsStream == null ||
+        _roomsStreamUserId != currentUserId ||
+        _roomsStreamLimit != _roomLimit) {
+      _roomsStreamUserId = currentUserId;
+      _roomsStreamLimit = _roomLimit;
+      _roomsStream = chatService.getChatRooms(limit: _roomLimit);
+    }
   }
 
   @override
@@ -128,6 +153,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final currentUserId = currentUser?.uid;
     final chatService = context.read<ChatService>();
     final productService = context.watch<ProductService>();
+    _syncRoomsStream(chatService, currentUserId);
 
     return Scaffold(
       backgroundColor: surfaceLight,
@@ -142,7 +168,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ? _buildLoginRequired()
                   : _buildChatList(
                       context,
-                      chatService,
+                      _roomsStream,
                       productService,
                       currentUserId,
                     ),
@@ -242,12 +268,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   /// 채팅 목록 스트림
   Widget _buildChatList(
     BuildContext context,
-    ChatService chatService,
+    Stream<List<ChatRoom>>? roomsStream,
     ProductService productService,
     String? currentUserId,
   ) {
+    if (roomsStream == null) {
+      return _buildLoginRequired();
+    }
     return StreamBuilder<List<ChatRoom>>(
-      stream: chatService.getChatRooms(limit: _roomLimit),
+      stream: roomsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -341,18 +370,20 @@ class _ChatListScreenState extends State<ChatListScreen> {
       stream: otherUserId == null || otherUserId.isEmpty
           ? Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
           : FirebaseFirestore.instance
-              .collection('users')
+              .collection('public_profiles')
               .doc(otherUserId)
               .snapshots(),
       builder: (context, userSnapshot) {
         final data = userSnapshot.data?.data();
-        final userModel = data == null ? null : UserModel.fromJson(data);
+        final profile = data == null
+            ? null
+            : PublicProfile.fromJson(data, docId: otherUserId);
         final otherName = _resolveOtherName(
           room,
           currentUserId,
-          userModel: userModel,
+          profile: profile,
         );
-        final avatarImage = _resolveProfileImage(userModel);
+        final avatarImage = _resolveProfileImage(profile);
 
         return InkWell(
           onTap: roomId.isEmpty

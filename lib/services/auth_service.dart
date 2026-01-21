@@ -53,20 +53,35 @@ class AuthService {
   Future<void> _ensureUserDocument(User user) async {
     final docRef = _firestore.collection('users').doc(user.uid);
     final snapshot = await docRef.get();
-    if (snapshot.exists) {
-      return;
+    final existingData = snapshot.data();
+    final nickname = existingData?['nickname']?.toString().trim().isNotEmpty == true
+        ? existingData!['nickname'].toString().trim()
+        : (user.displayName ?? user.email?.split('@').first ?? '사용자');
+    if (!snapshot.exists) {
+      final userModel = UserModel(
+        uid: user.uid,
+        email: user.email ?? '',
+        nickname: nickname,
+        profileImageUrl: null,
+        createdAt: DateTime.now(),
+      );
+      await docRef.set(userModel.toJson());
     }
 
-    final nickname =
-        user.displayName ?? user.email?.split('@').first ?? '사용자';
-    final userModel = UserModel(
-      uid: user.uid,
-      email: user.email ?? '',
-      nickname: nickname,
-      profileImageUrl: null,
-      createdAt: DateTime.now(),
-    );
-    await docRef.set(userModel.toJson());
+    final publicRef =
+        _firestore.collection('public_profiles').doc(user.uid);
+    final publicSnapshot = await publicRef.get();
+    if (!publicSnapshot.exists) {
+      final profileImageUrl =
+          existingData?['profileImageUrl']?.toString().trim() ?? '';
+      await publicRef.set({
+        'uid': user.uid,
+        'nickname': nickname,
+        'profileImageUrl': profileImageUrl.isEmpty ? null : profileImageUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   Future<void> _ensureGoogleSignInInitialized() {

@@ -86,6 +86,21 @@ class UserService {
         .doc(uid)
         .set(updateData, SetOptions(merge: true));
 
+    final publicUpdate = <String, dynamic>{
+      'uid': uid,
+      'nickname': trimmedNickname,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (deleteImage) {
+      publicUpdate['profileImageUrl'] = null;
+    } else if (profileImageUrl != null) {
+      publicUpdate['profileImageUrl'] = profileImageUrl;
+    }
+    await _firestore
+        .collection('public_profiles')
+        .doc(uid)
+        .set(publicUpdate, SetOptions(merge: true));
+
     return getUser(uid);
   }
 
@@ -240,6 +255,7 @@ class UserService {
     }
 
     await _firestore.collection('users').doc(uid).delete();
+    await _firestore.collection('public_profiles').doc(uid).delete();
 
     if (deleteProducts) {
       await _deleteProductsBySeller(uid);

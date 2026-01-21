@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/product.dart';
@@ -6,8 +7,118 @@ import '../providers/user_service.dart';
 import 'detail_screen.dart';
 import '../widgets/product_image.dart';
 
-class LikeListScreen extends StatelessWidget {
+class LikeListScreen extends StatefulWidget {
   const LikeListScreen({super.key});
+
+  @override
+  State<LikeListScreen> createState() => _LikeListScreenState();
+}
+
+class _LikeListScreenState extends State<LikeListScreen> {
+  static const int _pageSize = 20;
+  final ScrollController _scrollController = ScrollController();
+  DocumentSnapshot<Map<String, dynamic>>? _lastLikeDoc;
+  List<Product> _likedProducts = [];
+  bool _isLoading = false;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  String? _currentUid;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final user = context.read<UserService>().currentUser;
+    final uid = user?.uid;
+    if (uid == null) {
+      if (_currentUid != null) {
+        setState(() {
+          _currentUid = null;
+          _likedProducts = [];
+          _lastLikeDoc = null;
+          _hasMore = true;
+          _isLoading = false;
+          _isLoadingMore = false;
+        });
+      }
+      return;
+    }
+    if (_currentUid != uid) {
+      _currentUid = uid;
+      _resetAndLoad();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _resetAndLoad() {
+    setState(() {
+      _likedProducts = [];
+      _lastLikeDoc = null;
+      _hasMore = true;
+    });
+    _loadMore(initial: true);
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients ||
+        _isLoadingMore ||
+        _isLoading ||
+        !_hasMore) {
+      return;
+    }
+    if (_scrollController.position.extentAfter < 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore({bool initial = false}) async {
+    if (_isLoadingMore || (!_hasMore && !initial)) return;
+    final uid = _currentUid?.trim() ?? '';
+    if (uid.isEmpty) return;
+
+    setState(() {
+      if (initial) {
+        _isLoading = true;
+      } else {
+        _isLoadingMore = true;
+      }
+    });
+
+    try {
+      final result =
+          await context.read<ProductService>().getWishlistProductsPage(
+                uid: uid,
+                startAfter: _lastLikeDoc,
+                limit: _pageSize,
+              );
+      if (!mounted) return;
+      setState(() {
+        if (initial) {
+          _likedProducts = result.products;
+        } else {
+          _likedProducts.addAll(result.products);
+        }
+        _lastLikeDoc = result.lastLikeDoc;
+        _hasMore = result.hasMore;
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    }
+  }
 
   String _formatPrice(int price) {
     final priceString = price.toString();
@@ -32,48 +143,46 @@ class LikeListScreen extends StatelessWidget {
       );
     }
 
-    final productService = context.watch<ProductService>();
-    final wishlistFuture =
-        productService.getWishlistProducts(currentUser.uid);
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('관심목록'),
         elevation: 0,
       ),
-      body: FutureBuilder<List<Product>>(
-        future: wishlistFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return const Center(child: Text('관심 목록을 불러오지 못했어요.'));
-          }
-
-          final likedProducts = snapshot.data ?? [];
-          if (likedProducts.isEmpty) {
-            return _EmptyState(
-              primaryColor: Theme.of(context).colorScheme.primary,
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: likedProducts.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final product = likedProducts[index];
-              return _LikeListItem(
-                product: product,
-                priceText: _formatPrice(product.price),
-              );
-            },
-          );
-        },
-      ),
+      body: _isLoading && _likedProducts.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : _likedProducts.isEmpty
+              ? _EmptyState(
+                  primaryColor: Theme.of(context).colorScheme.primary,
+                )
+              : ListView.separated(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount:
+                      _likedProducts.length + (_isLoadingMore ? 1 : 0),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    if (index >= _likedProducts.length) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    final product = _likedProducts[index];
+                    return _LikeListItem(
+                      product: product,
+                      priceText: _formatPrice(product.price),
+                      onUnliked: () {
+                        setState(() {
+                          _likedProducts.removeWhere(
+                            (item) => item.id == product.id,
+                          );
+                        });
+                      },
+                    );
+                  },
+                ),
     );
   }
 }
@@ -81,10 +190,12 @@ class LikeListScreen extends StatelessWidget {
 class _LikeListItem extends StatelessWidget {
   final Product product;
   final String priceText;
+  final VoidCallback onUnliked;
 
   const _LikeListItem({
     required this.product,
     required this.priceText,
+    required this.onUnliked,
   });
 
   @override
@@ -182,6 +293,7 @@ class _LikeListItem extends StatelessWidget {
                               context
                                   .read<ProductService>()
                                   .toggleLike(product.id, currentUser.uid);
+                              onUnliked();
                               messenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('관심 목록에서 제거했어요.'),

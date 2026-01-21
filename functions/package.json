@@ -11,7 +11,8 @@
     "shell": "firebase functions:shell",
     "start": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "backfill:public-profiles": "node scripts/backfill_public_profiles.js"
   },
   "dependencies": {
     "firebase-admin": "^11.11.0",

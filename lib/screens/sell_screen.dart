@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/product.dart';
@@ -232,6 +233,7 @@ class _SellScreenState extends State<SellScreen> {
       await context.read<ProductService>().addProduct(product, images: _selectedImages);
 
       if (!mounted) return;
+      context.read<ProductService>().resetPagination();
       _clearForm();
 
       final navigator = Navigator.of(context);
@@ -241,7 +243,15 @@ class _SellScreenState extends State<SellScreen> {
         context.read<MainTabProvider>().setIndex(0);
       }
       messenger.showSnackBar(const SnackBar(content: Text('등록 완료!')));
-    } catch (_) {
+    } on FirebaseException catch (error, stackTrace) {
+      debugPrint('상품 업로드 실패: ${error.plugin} ${error.code} ${error.message}');
+      debugPrint('상품 업로드 스택: $stackTrace');
+      messenger.showSnackBar(
+        SnackBar(content: Text('업로드에 실패했습니다. (${error.code})')),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('상품 업로드 실패: $error');
+      debugPrint('상품 업로드 스택: $stackTrace');
       messenger.showSnackBar(const SnackBar(content: Text('업로드에 실패했습니다.')));
     } finally {
       if (mounted) setState(() => _isUploading = false);

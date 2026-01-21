@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +31,7 @@ class _SearchScreenState extends State<SearchScreen> {
   static const Color surfaceWhite = Color(0xFFFFFFFF);
 
   final TextEditingController _controller = TextEditingController();
+  Timer? _searchDebounceTimer;
   String _query = '';
   bool _isSubmitted = false;
   bool _isLoading = false;
@@ -96,7 +99,7 @@ class _SearchScreenState extends State<SearchScreen> {
     // didChangeDependencies에서 호출되므로 context.read 사용
     if (!mounted) return;
     final productService = context.read<ProductService>();
-    final keywords = await productService.getPopularKeywords(limit: 10);
+    final keywords = await productService.getPopularKeywordsCached(limit: 10);
     if (mounted) {
       setState(() {
         _popularKeywords = keywords;
@@ -176,6 +179,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _controller.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -184,16 +188,24 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _handleQueryChanged(String value, ProductService productService) {
     // 입력 중에는 자동완성만 갱신
+    _searchDebounceTimer?.cancel();
     productService.resetPagination();
     setState(() {
       _query = value;
       _isSubmitted = false;
       _isLoading = false;
-      _suggestions = productService.getSearchSuggestionsWithType(value); // 타입 정보 포함
+      _suggestions = [];
+    });
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _suggestions = productService.getSearchSuggestionsWithType(value); // 타입 정보 포함
+      });
     });
   }
 
   void _submitQuery(String value, ProductService productService) {
+    _searchDebounceTimer?.cancel();
     final trimmedQuery = value.trim();
     if (trimmedQuery.isNotEmpty) {
       _addRecentSearch(trimmedQuery);
@@ -206,10 +218,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
   
   void _clearQuery(ProductService productService) {
+    _searchDebounceTimer?.cancel();
     _controller.clear();
     productService.resetPagination();
     setState(() {
       _query = '';
+      _suggestions = [];
     });
     _performSearch(productService);
   }
@@ -285,6 +299,7 @@ class _SearchScreenState extends State<SearchScreen> {
         filterSpecs: _filterSpecs,
         contextKey: _contextKey,
       );
+      await _loadMoreUntilResults(productService);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -295,6 +310,17 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadMoreUntilResults(ProductService productService) async {
+    const maxAutoPages = 3;
+    var loadedPages = 0;
+    while (productService.hasMoreProducts &&
+        productService.paginatedProducts.isEmpty &&
+        loadedPages < maxAutoPages) {
+      await productService.loadMoreProducts();
+      loadedPages += 1;
     }
   }
 
@@ -828,6 +854,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // 검색 결과 없음
     if (results.isEmpty) {
+      final canLoadMore = productService.hasMoreProducts && !_isLoading;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -846,6 +873,26 @@ class _SearchScreenState extends State<SearchScreen> {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (canLoadMore) ...[
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () async {
+                  setState(() {
+                    _isLoading = true;
+                  });
+                  await productService.loadMoreProducts();
+                  if (!mounted) return;
+                  setState(() {
+                    _isLoading = false;
+                  });
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primaryBlue,
+                  side: const BorderSide(color: primaryBlue),
+                ),
+                child: const Text('더 불러오기'),
+              ),
+            ],
           ],
         ),
       );

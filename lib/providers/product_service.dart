@@ -46,6 +46,18 @@ class SearchSuggestion {
   }
 }
 
+class WishlistPage {
+  final List<Product> products;
+  final DocumentSnapshot<Map<String, dynamic>>? lastLikeDoc;
+  final bool hasMore;
+
+  const WishlistPage({
+    required this.products,
+    required this.lastLikeDoc,
+    required this.hasMore,
+  });
+}
+
 class _SearchCriteria {
   final String? category;
   final String? subCategory;
@@ -107,9 +119,21 @@ class ProductService extends ChangeNotifier {
   bool _hasMoreProducts = true;
   bool _isPaginationLoading = false;
   static const int _pageSize = 20;
+  static const int _adminPageSize = 50;
   static const int _priceBucketSize = 100000;
   static const int _lengthBucketSize = 5;
   static const int _maxWhereInValues = 10;
+
+  List<Product> _adminBaseProducts = [];
+  List<Product> _adminExtraProducts = [];
+  DocumentSnapshot<Map<String, dynamic>>? _adminLastDocument;
+  bool _hasMoreAdminProducts = true;
+  bool _isAdminLoadingMore = false;
+
+  List<String> _cachedPopularKeywords = [];
+  DateTime? _popularKeywordsCacheTime;
+  bool _isPopularKeywordsLoading = false;
+  static const Duration _popularKeywordsCacheTtl = Duration(minutes: 5);
 
   _SearchCriteria? _activeSearchCriteria;
   List<String> _activeQueryTokens = [];
@@ -121,6 +145,8 @@ class ProductService extends ChangeNotifier {
 
   // 관리자용: 필터링되지 않은 모든 상품 반환
   List<Product> get allProductsForAdmin => _allProductList;
+  bool get hasMoreAdminProducts => _hasMoreAdminProducts;
+  bool get isAdminLoadingMore => _isAdminLoadingMore;
 
   // 페이징된 상품 리스트 (무한 스크롤용)
   List<Product> get paginatedProducts => _paginatedProducts;
@@ -177,28 +203,115 @@ class ProductService extends ChangeNotifier {
     final productIds = likesSnapshot.docs
         .map((doc) => doc.id.trim())
         .where((id) => id.isNotEmpty)
+        .toSet()
         .toList();
 
     if (productIds.isEmpty) {
       return [];
     }
 
-    final products = await Future.wait(productIds.map((productId) async {
+    final productsByDocId = <String, Product>{};
+    for (var i = 0; i < productIds.length; i += _maxWhereInValues) {
+      final batchIds = productIds.skip(i).take(_maxWhereInValues).toList();
       final snapshot = await _firestore
           .collection('products')
-          .where('id', isEqualTo: productId)
-          .limit(1)
+          .where('id', whereIn: batchIds)
           .get();
-      if (snapshot.docs.isEmpty) {
-        return null;
+      for (final doc in snapshot.docs) {
+        productsByDocId[doc.id] = _productFromDoc(doc);
       }
-      return _productFromDoc(snapshot.docs.first);
-    }));
+    }
 
-    final filteredProducts = products.whereType<Product>().toList();
+    final filteredProducts = productsByDocId.values.toList();
     return _filterBlockedProducts(filteredProducts)
         .where((product) => product.status != ProductStatus.hidden)
         .toList();
+  }
+
+  Future<WishlistPage> getWishlistProductsPage({
+    required String uid,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 20,
+  }) async {
+    final trimmedUid = uid.trim();
+    if (trimmedUid.isEmpty || limit <= 0) {
+      return const WishlistPage(
+        products: [],
+        lastLikeDoc: null,
+        hasMore: false,
+      );
+    }
+
+    Query<Map<String, dynamic>> query = _firestore
+        .collection('users')
+        .doc(trimmedUid)
+        .collection('likes')
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    try {
+      final likesSnapshot = await query.get();
+      final hasMore = likesSnapshot.docs.length >= limit;
+      final lastDoc =
+          likesSnapshot.docs.isEmpty ? startAfter : likesSnapshot.docs.last;
+
+      final productIds = likesSnapshot.docs
+          .map((doc) => doc.id.trim())
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (productIds.isEmpty) {
+        return WishlistPage(
+          products: const [],
+          lastLikeDoc: lastDoc,
+          hasMore: hasMore,
+        );
+      }
+
+      final productsById = <String, Product>{};
+      for (var i = 0; i < productIds.length; i += _maxWhereInValues) {
+        final batchIds = productIds.skip(i).take(_maxWhereInValues).toList();
+        final snapshot = await _firestore
+            .collection('products')
+            .where('id', whereIn: batchIds)
+            .get();
+        for (final doc in snapshot.docs) {
+          final product = _productFromDoc(doc);
+          if (product.id.isNotEmpty) {
+            productsById[product.id] = product;
+          }
+        }
+      }
+
+      final orderedProducts = <Product>[];
+      for (final productId in productIds) {
+        final product = productsById[productId];
+        if (product != null) {
+          orderedProducts.add(product);
+        }
+      }
+
+      final filtered = _filterBlockedProducts(orderedProducts)
+          .where((product) => product.status != ProductStatus.hidden)
+          .toList();
+
+      return WishlistPage(
+        products: filtered,
+        lastLikeDoc: lastDoc,
+        hasMore: hasMore,
+      );
+    } catch (_) {
+      return const WishlistPage(
+        products: [],
+        lastLikeDoc: null,
+        hasMore: false,
+      );
+    }
   }
 
   // 찜 여부 확인 함수
@@ -211,11 +324,6 @@ class ProductService extends ChangeNotifier {
     final trimmedProductId = productId.trim();
     final trimmedUid = uid.trim();
     if (trimmedProductId.isEmpty || trimmedUid.isEmpty) {
-      return;
-    }
-
-    final productRef = await _findProductRefById(trimmedProductId);
-    if (productRef == null) {
       return;
     }
 
@@ -233,15 +341,9 @@ class ProductService extends ChangeNotifier {
           transaction.set(likeRef, {
             'createdAt': FieldValue.serverTimestamp(),
           });
-          transaction.update(productRef, {
-            'likeCount': FieldValue.increment(1),
-          });
           isLiked = true;
         } else {
           transaction.delete(likeRef);
-          transaction.update(productRef, {
-            'likeCount': FieldValue.increment(-1),
-          });
           isLiked = false;
         }
       });
@@ -398,14 +500,66 @@ class ProductService extends ChangeNotifier {
         .collection('products')
         .orderBy('createdAt', descending: true);
 
-    if (!_isAdmin) {
+    if (_isAdmin) {
+      query = query.limit(_adminPageSize);
+    } else {
       query = query.limit(_latestLimit);
     }
 
     _productsSubscription = query.snapshots().listen((snapshot) {
-      _allProductList = snapshot.docs.map(_productFromDoc).toList();
-      _applyBlockedFilter();
+      final baseProducts = snapshot.docs.map(_productFromDoc).toList();
+      if (_isAdmin) {
+        _adminBaseProducts = baseProducts;
+        if (_adminExtraProducts.isEmpty) {
+          _adminLastDocument =
+              snapshot.docs.isEmpty ? null : snapshot.docs.last;
+          _hasMoreAdminProducts = snapshot.docs.length >= _adminPageSize;
+        }
+        _mergeAdminProducts();
+      } else {
+        _allProductList = baseProducts;
+        _applyBlockedFilter();
+      }
     });
+  }
+
+  Future<void> loadMoreAdminProducts() async {
+    if (!_isAdmin || _isAdminLoadingMore || !_hasMoreAdminProducts) {
+      return;
+    }
+
+    final lastDoc = _adminLastDocument;
+    if (lastDoc == null) {
+      return;
+    }
+
+    _isAdminLoadingMore = true;
+    notifyListeners();
+
+    try {
+      final snapshot = await _firestore
+          .collection('products')
+          .orderBy('createdAt', descending: true)
+          .startAfterDocument(lastDoc)
+          .limit(_adminPageSize)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        _hasMoreAdminProducts = false;
+        return;
+      }
+
+      _adminExtraProducts
+          .addAll(snapshot.docs.map(_productFromDoc).toList());
+      _adminLastDocument = snapshot.docs.last;
+      _hasMoreAdminProducts = snapshot.docs.length >= _adminPageSize;
+      _mergeAdminProducts();
+    } catch (_) {
+      // 관리자 추가 로드 실패는 무시하고 다음 시도를 허용합니다.
+    } finally {
+      _isAdminLoadingMore = false;
+      notifyListeners();
+    }
   }
 
   /// 페이징 상태 초기화
@@ -1007,6 +1161,8 @@ class ProductService extends ChangeNotifier {
             product.title.toLowerCase().contains(normalizedQuery);
         final brandMatch =
             product.brand.toLowerCase().contains(normalizedQuery);
+        final categoryMatch =
+            product.category.toLowerCase().contains(normalizedQuery);
         final subCategoryMatch =
             product.subCategory.toLowerCase().contains(normalizedQuery);
         final descriptionMatch =
@@ -1016,6 +1172,7 @@ class ProductService extends ChangeNotifier {
         );
         if (!titleMatch &&
             !brandMatch &&
+            !categoryMatch &&
             !subCategoryMatch &&
             !descriptionMatch &&
             !specsMatch) {
@@ -1063,6 +1220,26 @@ class ProductService extends ChangeNotifier {
     final suggestions = <SearchSuggestion>[];
     final addedValues = <String>{};
 
+    final popularKeywords = _getCachedPopularKeywords(limit: 20);
+    if (!_isPopularKeywordsCacheFresh()) {
+      unawaited(getPopularKeywordsCached(limit: 20));
+    }
+    if (popularKeywords.isNotEmpty) {
+      for (final keyword in popularKeywords) {
+        if (suggestions.length >= 5) break;
+        if (!keyword.toLowerCase().contains(normalizedQuery)) continue;
+        if (addedValues.add(keyword)) {
+          suggestions.add(SearchSuggestion(
+            value: keyword,
+            type: SuggestionType.title,
+          ));
+        }
+      }
+      if (suggestions.length >= 5) {
+        return suggestions.take(10).toList();
+      }
+    }
+
     // 1. 브랜드 매칭 (CategoryAttributes에서 정의된 브랜드 목록)
     // 카테고리별로 구분하여 표시 (예: 살로몬(스키) vs 살로몬(장비))
     final brandDefinitions = [
@@ -1077,6 +1254,7 @@ class ProductService extends ChangeNotifier {
     for (final (key, categoryLabel, definition) in brandDefinitions) {
       if (definition == null) continue;
       for (final brand in definition.options) {
+        if (suggestions.length >= 10) break;
         if (brand == '기타') continue; // '기타'는 제외
         final uniqueKey = '${brand}_$key';
         if (brand.toLowerCase().contains(normalizedQuery) && !addedKeys.contains(uniqueKey)) {
@@ -1089,6 +1267,7 @@ class ProductService extends ChangeNotifier {
           addedKeys.add(uniqueKey);
         }
       }
+      if (suggestions.length >= 10) break;
     }
 
     // 2. 상품 제목/브랜드 매칭 (기존 로직)
@@ -1203,6 +1382,27 @@ class ProductService extends ChangeNotifier {
     }
   }
 
+  Future<List<String>> getPopularKeywordsCached({int limit = 10}) async {
+    if (_isPopularKeywordsCacheFresh() &&
+        _cachedPopularKeywords.length >= limit) {
+      return _cachedPopularKeywords.take(limit).toList();
+    }
+
+    if (_isPopularKeywordsLoading) {
+      return _cachedPopularKeywords.take(limit).toList();
+    }
+
+    _isPopularKeywordsLoading = true;
+    try {
+      final keywords = await getPopularKeywords(limit: limit);
+      _cachedPopularKeywords = keywords;
+      _popularKeywordsCacheTime = DateTime.now();
+      return keywords;
+    } finally {
+      _isPopularKeywordsLoading = false;
+    }
+  }
+
   Product _productFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
     return Product.fromJson(data, docId: doc.id);
@@ -1253,6 +1453,7 @@ class ProductService extends ChangeNotifier {
             .map((doc) => doc.id.trim())
             .where((id) => id.isNotEmpty)
             .toSet();
+        _blockedUserIds.remove(user.uid.trim());
         _applyBlockedFilter();
       });
     });
@@ -1263,15 +1464,52 @@ class ProductService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _mergeAdminProducts() {
+    final combined = <String, Product>{};
+    for (final product in _adminBaseProducts) {
+      final key = product.docId ?? product.id;
+      if (key.isEmpty) continue;
+      combined[key] = product;
+    }
+    for (final product in _adminExtraProducts) {
+      final key = product.docId ?? product.id;
+      if (key.isEmpty) continue;
+      combined[key] = product;
+    }
+
+    final merged = combined.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _allProductList = merged;
+    _applyBlockedFilter();
+  }
+
+  bool _isPopularKeywordsCacheFresh() {
+    if (_popularKeywordsCacheTime == null) return false;
+    final now = DateTime.now();
+    return now.difference(_popularKeywordsCacheTime!) <
+        _popularKeywordsCacheTtl;
+  }
+
+  List<String> _getCachedPopularKeywords({int limit = 10}) {
+    if (_cachedPopularKeywords.isEmpty) {
+      return [];
+    }
+    return _cachedPopularKeywords.take(limit).toList();
+  }
+
   List<Product> _filterBlockedProducts(List<Product> products) {
     if (_blockedUserIds.isEmpty) {
       return List<Product>.from(products);
     }
+    final currentUid = _auth.currentUser?.uid.trim();
     return products
         .where(
           (product) =>
               product.sellerId.isEmpty ||
-              !_blockedUserIds.contains(product.sellerId),
+              (currentUid != null && currentUid.isNotEmpty
+                  ? product.sellerId == currentUid ||
+                      !_blockedUserIds.contains(product.sellerId)
+                  : !_blockedUserIds.contains(product.sellerId)),
         )
         .toList();
   }

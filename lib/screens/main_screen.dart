@@ -9,7 +9,7 @@ import '../providers/main_tab_provider.dart';
 import '../providers/user_service.dart';
 import '../services/chat_service.dart';
 
-class MainScreen extends StatelessWidget {
+class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
   static const List<Widget> _screens = [
@@ -21,16 +21,35 @@ class MainScreen extends StatelessWidget {
   ];
 
   @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  Stream<int>? _unreadCountStream;
+  String? _unreadStreamUserId;
+
+  void _syncUnreadStream(
+    ChatService chatService,
+    String? currentUserId,
+  ) {
+    if (_unreadCountStream == null || _unreadStreamUserId != currentUserId) {
+      _unreadStreamUserId = currentUserId;
+      _unreadCountStream = chatService.getTotalUnreadCount();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentIndex = context.watch<MainTabProvider>().currentIndex;
     final currentUser = context.watch<UserService>().currentUser;
     final chatService = context.read<ChatService>();
+    _syncUnreadStream(chatService, currentUser?.uid);
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: IndexedStack(
         index: currentIndex,
-        children: _screens,
+        children: MainScreen._screens,
       ),
       bottomNavigationBar: currentUser == null
           ? _buildBottomNavigationBar(
@@ -39,7 +58,7 @@ class MainScreen extends StatelessWidget {
               null,
             )
           : StreamBuilder<int>(
-              stream: chatService.getTotalUnreadCount(),
+              stream: _unreadCountStream,
               builder: (context, snapshot) {
                 final unreadCount = snapshot.data ?? 0;
                 return _buildBottomNavigationBar(

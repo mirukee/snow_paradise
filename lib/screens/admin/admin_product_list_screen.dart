@@ -15,6 +15,32 @@ class _AdminProductListScreenState extends State<AdminProductListScreen> {
   // or use a local filtered list if we want to implement search within this screen.
   
   String _searchQuery = '';
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final productService = context.read<ProductService>();
+    if (!productService.hasMoreAdminProducts ||
+        productService.isAdminLoadingMore) {
+      return;
+    }
+    if (_scrollController.position.extentAfter < 200) {
+      productService.loadMoreAdminProducts();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,8 +85,16 @@ class _AdminProductListScreenState extends State<AdminProductListScreen> {
             const SizedBox(height: 16),
             Expanded(
               child: ListView.builder(
-                itemCount: filteredProducts.length,
+                controller: _scrollController,
+                itemCount: filteredProducts.length +
+                    (productService.isAdminLoadingMore ? 1 : 0),
                 itemBuilder: (context, index) {
+                  if (index >= filteredProducts.length) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
                   final product = filteredProducts[index];
                   return ListTile(
                     leading: Container(

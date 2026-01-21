@@ -259,22 +259,35 @@ class NotificationProvider extends ChangeNotifier {
   Future<void> deleteAllNotifications() async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
-    
-    final batch = _firestore.batch();
-    for (final notification in _notifications) {
-      final ref = _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('notifications')
-          .doc(notification.id);
-      batch.delete(ref);
+
+    if (_notifications.isEmpty) return;
+
+    final chunks = _splitIntoChunks(_notifications, 450);
+    for (final chunk in chunks) {
+      final batch = _firestore.batch();
+      for (final notification in chunk) {
+        final ref = _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notifications')
+            .doc(notification.id);
+        batch.delete(ref);
+      }
+
+      try {
+        await batch.commit();
+      } catch (e) {
+        debugPrint('전체 알림 삭제 실패: $e');
+      }
     }
-    
-    try {
-      await batch.commit();
-    } catch (e) {
-      debugPrint('전체 알림 삭제 실패: $e');
+  }
+
+  List<List<T>> _splitIntoChunks<T>(List<T> list, int chunkSize) {
+    final chunks = <List<T>>[];
+    for (var i = 0; i < list.length; i += chunkSize) {
+      chunks.add(list.skip(i).take(chunkSize).toList());
     }
+    return chunks;
   }
 
   Future<void> _syncToken(String? token) async {

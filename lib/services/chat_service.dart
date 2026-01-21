@@ -291,29 +291,6 @@ class ChatService {
       updates[senderLastReadField] = now;
     }
 
-    // 첫 메시지 전송 시 chatCount 증가 처리
-    final isFirstMessageSent = roomData['isFirstMessageSent'] ?? true;
-    if (!isFirstMessageSent) {
-      updates['isFirstMessageSent'] = true;
-      final productId = roomData['productId']?.toString();
-      if (productId != null && productId.isNotEmpty) {
-        try {
-          final productSnapshot = await _firestore
-              .collection('products')
-              .where('id', isEqualTo: productId)
-              .limit(1)
-              .get();
-          if (productSnapshot.docs.isNotEmpty) {
-            batch.update(productSnapshot.docs.first.reference, {
-              'chatCount': FieldValue.increment(1),
-            });
-          }
-        } catch (_) {
-          // 카운트 업데이트 실패는 무시합니다.
-        }
-      }
-    }
-
     batch.update(roomRef, updates);
     await batch.commit();
   }

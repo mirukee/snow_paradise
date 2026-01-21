@@ -11,6 +11,7 @@ import 'screens/main_screen.dart';
 import 'package:snow_paradise/services/chat_service.dart';
 import 'services/notification_service.dart';
 import 'services/brand_service.dart'; // [추가]
+import 'utils/route_observer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,6 +59,7 @@ class SnowParadiseApp extends StatelessWidget {
       title: '스노우 파라다이스',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
+      navigatorObservers: [routeObserver],
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,

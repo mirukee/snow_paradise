@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
 import '../models/product.dart';
-import '../models/user_model.dart';
+import '../models/public_profile.dart';
 import '../providers/product_service.dart';
 import '../providers/user_service.dart';
 import '../widgets/product_image.dart';
@@ -351,12 +351,14 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
-          .collection('users')
+          .collection('public_profiles')
           .doc(trimmedSellerId)
           .snapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data();
-        final userModel = data == null ? null : UserModel.fromJson(data);
+        final userModel = data == null
+            ? null
+            : PublicProfile.fromJson(data, docId: trimmedSellerId);
         final resolvedName = userModel?.nickname.trim().isNotEmpty == true
             ? userModel!.nickname
             : (widget.sellerName.isEmpty ? '판매자' : widget.sellerName);

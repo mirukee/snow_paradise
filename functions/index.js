@@ -30,6 +30,28 @@ function buildNotificationBody(text) {
   return `${trimmed.slice(0, MAX_BODY_LENGTH)}…`;
 }
 
+async function findProductRefById(productId) {
+  if (!productId) {
+    return null;
+  }
+  const snapshot = await db
+    .collection("products")
+    .where("id", "==", productId)
+    .limit(1)
+    .get();
+  if (snapshot.empty) {
+    return null;
+  }
+  return snapshot.docs[0].ref;
+}
+
+function toNonNegativeInt(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+  return value < 0 ? 0 : Math.floor(value);
+}
+
 exports.sendChatNotification = functions.firestore
   .document("chat_rooms/{roomId}/messages/{messageId}")
   .onCreate(async (snapshot, context) => {
@@ -331,6 +353,101 @@ exports.sendLikeNotification = functions.firestore
       successCount: response.successCount,
       failureCount: response.failureCount,
       errorStats,
+    });
+
+    return null;
+  });
+
+exports.updateLikeCountOnCreate = functions.firestore
+  .document("users/{userId}/likes/{productId}")
+  .onCreate(async (snapshot, context) => {
+    const productId = toCleanString(context.params.productId);
+    const productRef = await findProductRefById(productId);
+    if (!productRef) {
+      functions.logger.warn("Product not found for like increment.", {
+        productId,
+      });
+      return null;
+    }
+
+    await db.runTransaction(async (transaction) => {
+      const productSnap = await transaction.get(productRef);
+      if (!productSnap.exists) {
+        return;
+      }
+      const current = toNonNegativeInt(productSnap.get("likeCount"));
+      transaction.update(productRef, { likeCount: current + 1 });
+    });
+
+    return null;
+  });
+
+exports.updateLikeCountOnDelete = functions.firestore
+  .document("users/{userId}/likes/{productId}")
+  .onDelete(async (snapshot, context) => {
+    const productId = toCleanString(context.params.productId);
+    const productRef = await findProductRefById(productId);
+    if (!productRef) {
+      functions.logger.warn("Product not found for like decrement.", {
+        productId,
+      });
+      return null;
+    }
+
+    await db.runTransaction(async (transaction) => {
+      const productSnap = await transaction.get(productRef);
+      if (!productSnap.exists) {
+        return;
+      }
+      const current = toNonNegativeInt(productSnap.get("likeCount"));
+      const next = current - 1;
+      transaction.update(productRef, { likeCount: next < 0 ? 0 : next });
+    });
+
+    return null;
+  });
+
+exports.updateChatCountOnFirstMessage = functions.firestore
+  .document("chat_rooms/{roomId}/messages/{messageId}")
+  .onCreate(async (snapshot, context) => {
+    const roomId = toCleanString(context.params.roomId);
+    if (!roomId) {
+      return null;
+    }
+
+    const roomRef = db.collection("chat_rooms").doc(roomId);
+
+    await db.runTransaction(async (transaction) => {
+      const roomSnap = await transaction.get(roomRef);
+      if (!roomSnap.exists) {
+        return;
+      }
+
+      const roomData = roomSnap.data() || {};
+      if (roomData.isFirstMessageSent === true) {
+        return;
+      }
+
+      const productId = toCleanString(roomData.productId);
+      if (!productId) {
+        transaction.update(roomRef, { isFirstMessageSent: true });
+        return;
+      }
+
+      const productQuery = db
+        .collection("products")
+        .where("id", "==", productId)
+        .limit(1);
+      const productSnapshot = await transaction.get(productQuery);
+      if (productSnapshot.empty) {
+        transaction.update(roomRef, { isFirstMessageSent: true });
+        return;
+      }
+
+      const productDoc = productSnapshot.docs[0];
+      const current = toNonNegativeInt(productDoc.get("chatCount"));
+      transaction.update(productDoc.ref, { chatCount: current + 1 });
+      transaction.update(roomRef, { isFirstMessageSent: true });
     });
 
     return null;

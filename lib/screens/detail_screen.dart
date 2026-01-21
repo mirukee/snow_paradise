@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // [추가] Provider 패키지
 import '../models/product.dart';
-import '../models/user_model.dart';
+import '../models/public_profile.dart';
 import '../providers/product_service.dart'; // [추가] ProductService
 import '../providers/user_service.dart';
 import '../services/report_service.dart';
@@ -587,13 +587,17 @@ class _DetailScreenState extends State<DetailScreen> {
                             : StreamBuilder<
                                 DocumentSnapshot<Map<String, dynamic>>>(
                                 stream: FirebaseFirestore.instance
-                                    .collection('users')
+                                    .collection('public_profiles')
                                     .doc(sellerId)
                                     .snapshots(),
                                 builder: (context, snapshot) {
                                   final data = snapshot.data?.data();
-                                  final userModel =
-                                      data == null ? null : UserModel.fromJson(data);
+                                  final userModel = data == null
+                                      ? null
+                                      : PublicProfile.fromJson(
+                                          data,
+                                          docId: sellerId,
+                                        );
                                   final resolvedName =
                                       userModel?.nickname.trim().isNotEmpty == true
                                           ? userModel!.nickname

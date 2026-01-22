@@ -82,6 +82,7 @@ class _AdminReportListScreenState extends State<AdminReportListScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('신고 삭제'),
         content: const Text('이 신고를 삭제하시겠습니까?\n삭제된 신고는 복구할 수 없습니다.'),
         actions: [

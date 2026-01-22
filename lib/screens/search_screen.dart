@@ -306,10 +306,11 @@ class _SearchScreenState extends State<SearchScreen> {
         const SnackBar(content: Text('검색에 실패했습니다.')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -1250,6 +1251,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: const BoxDecoration(
@@ -1301,7 +1303,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
           // 필터 컨텐츠
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomInset),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1332,7 +1334,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
           ),
           // 적용 버튼
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + bottomInset),
             child: SizedBox(
               width: double.infinity,
               height: 56,
@@ -1451,26 +1453,11 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
         ),
         const SizedBox(height: 8),
         const Text(
-          '최대 2개까지 선택할 수 있습니다.',
+          '리조트는 최대 2개까지 선택할 수 있습니다.',
           style: TextStyle(
             fontSize: 12,
             color: textMuted,
           ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          '도시',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: textDark,
-          ),
-        ),
-        const SizedBox(height: 10),
-        _buildLocationChips(
-          options: TradeLocationConstants.cities,
-          prefix: 'city',
-          selectedKeys: selected,
         ),
         const SizedBox(height: 16),
         const Text(

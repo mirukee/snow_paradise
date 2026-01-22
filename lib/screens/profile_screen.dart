@@ -36,7 +36,6 @@ class _ProfileViewState extends State<_ProfileView> {
   static const Color _backgroundLight = Color(0xFFF6F7F8);
   static const Color _surfaceLight = Color(0xFFFFFFFF);
   static const Color _textDark = Color(0xFF111518);
-  static const Color _textGrey = Color(0xFF637688);
 
   @override
   void dispose() {
@@ -125,6 +124,7 @@ class _ProfileViewState extends State<_ProfileView> {
       builder: (context) {
         final controller = TextEditingController();
         return AlertDialog(
+          scrollable: true,
           title: const Text('태그 추가'),
           content: TextField(
             controller: controller,
@@ -269,6 +269,9 @@ class _ProfileViewState extends State<_ProfileView> {
               // Content Area
               Expanded(
                 child: SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).viewInsets.bottom,
+                  ),
                   child: Container(
                     color: _surfaceLight,
                     constraints: BoxConstraints(
@@ -298,7 +301,7 @@ class _ProfileViewState extends State<_ProfileView> {
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
+                                        color: Colors.black.withValues(alpha: 0.05),
                                         blurRadius: 4,
                                         offset: const Offset(0, 2),
                                       ),
@@ -324,7 +327,7 @@ class _ProfileViewState extends State<_ProfileView> {
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withOpacity(0.1),
+                                          color: Colors.black.withValues(alpha: 0.1),
                                           blurRadius: 4,
                                           offset: const Offset(0, 2),
                                         ),
@@ -397,10 +400,10 @@ class _ProfileViewState extends State<_ProfileView> {
                             ..._tags.map((tag) => Container(
                               padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
                               decoration: BoxDecoration(
-                                color: _primaryBlue.withOpacity(0.1),
+                                color: _primaryBlue.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: _primaryBlue.withOpacity(0.1),
+                                  color: _primaryBlue.withValues(alpha: 0.1),
                                 ),
                               ),
                               child: Row(
@@ -419,7 +422,7 @@ class _ProfileViewState extends State<_ProfileView> {
                                     onTap: () => _removeTag(tag),
                                     child: Container(
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.5),
+                                        color: Colors.white.withValues(alpha: 0.5),
                                         shape: BoxShape.circle,
                                       ),
                                       padding: const EdgeInsets.all(2),
@@ -533,4 +536,3 @@ class _ProfileViewState extends State<_ProfileView> {
     );
   }
 }
-

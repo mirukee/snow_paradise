@@ -25,7 +25,6 @@ class _AdminBrandManagementScreenState extends State<AdminBrandManagementScreen>
 
   // 색상 상수
   static const Color primaryBlue = Color(0xFF3E97EA);
-  static const Color textDark = Color(0xFF101922);
 
   @override
   void initState() {
@@ -112,6 +111,7 @@ class _AdminBrandManagementScreenState extends State<AdminBrandManagementScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text('$categoryName 브랜드 추가'),
         content: TextField(
           controller: _addController,
@@ -159,6 +159,7 @@ class _AdminBrandManagementScreenState extends State<AdminBrandManagementScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('브랜드 수정'),
         content: TextField(
           controller: controller,

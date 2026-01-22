@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/report_service.dart';
-import '../models/user_model.dart'; // For user feedback if needed
 import '../providers/user_service.dart'; // To get current user
 
 class ReportDialog extends StatefulWidget {
@@ -78,6 +77,7 @@ class _ReportDialogState extends State<ReportDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       title: const Text('신고하기', style: TextStyle(fontWeight: FontWeight.bold)),
       content: SingleChildScrollView(
         child: Column(

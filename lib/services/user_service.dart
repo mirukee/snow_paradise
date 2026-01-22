@@ -21,6 +21,21 @@ class UserService {
   final FirebaseStorage _storage;
   final FirebaseAuth _auth;
 
+  String _resolveProfileContentType(XFile imageFile, Uint8List? imageBytes) {
+    if (imageBytes != null) {
+      return 'image/jpeg';
+    }
+
+    final name = imageFile.name.toLowerCase();
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+    if (name.endsWith('.gif')) return 'image/gif';
+    if (name.endsWith('.webp')) return 'image/webp';
+    if (name.endsWith('.heic')) return 'image/heic';
+    if (name.endsWith('.heif')) return 'image/heif';
+    return 'image/jpeg';
+  }
+
   Future<UserModel?> getUser(String uid) async {
     if (uid.isEmpty) {
       return null;
@@ -59,8 +74,10 @@ class UserService {
         dataToUpload = await imageFile.readAsBytes();
       }
       
-      // 메타데이터 제거 (HEIC 등 다양한 포맷 지원)
-      await ref.putData(dataToUpload); 
+      final metadata = SettableMetadata(
+        contentType: _resolveProfileContentType(imageFile, imageBytes),
+      );
+      await ref.putData(dataToUpload, metadata); 
       profileImageUrl = await ref.getDownloadURL();
     }
 

@@ -1,0 +1,40 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isImageUpload(maxSize) {
+      return request.resource != null &&
+          request.resource.size <= maxSize &&
+          request.resource.contentType != null &&
+          request.resource.contentType.matches('image/.*');
+    }
+
+    // 상품 이미지 업로드 경로: 모든 사용자 읽기, 본인만 쓰기
+    match /uploads/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isOwner(userId) && isImageUpload(10 * 1024 * 1024);
+      allow delete: if isOwner(userId);
+    }
+
+    // 레거시 업로드 경로: 읽기만 허용 (기존 URL 깨짐 방지)
+    match /uploads/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 프로필 이미지: 모든 사용자 읽기, 본인만 쓰기
+    match /user_profiles/{userId} {
+      allow read: if true;
+      allow create, update: if isOwner(userId) && isImageUpload(5 * 1024 * 1024);
+      allow delete: if isOwner(userId);
+    }
+
+    // 그 외 경로는 기본 거부
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

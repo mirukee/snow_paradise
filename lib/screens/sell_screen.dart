@@ -8,7 +8,6 @@ import '../providers/product_service.dart';
 import '../providers/main_tab_provider.dart';
 import '../providers/user_service.dart';
 import '../services/user_service.dart' as profile_service;
-import '../widgets/product_image.dart';
 import '../widgets/dynamic_attribute_form.dart';
 import 'package:flutter/foundation.dart';
 import '../utils/image_compressor.dart';
@@ -50,6 +49,8 @@ class _SellScreenState extends State<SellScreen> {
   String? _selectedSubCategory;
   String? _selectedCondition;
   String? _selectedTradeLocationKey;
+  final List<String> _tradeMethods = ['직거래', '일반거래'];
+  final List<String> _selectedTradeMethods = [];
   
   // 동적 속성 저장 (Key: Attribute Key, Value: Selected Option)
   // 동적 속성 저장 (Key: Attribute Key, Value: Selected Option)
@@ -58,9 +59,7 @@ class _SellScreenState extends State<SellScreen> {
   // 상품 상태 옵션
   final List<Map<String, String>> _conditions = [
     {'emoji': '🏷️', 'label': '새상품', 'desc': '(미개봉)'},
-    {'emoji': '⭐', 'label': 'S급', 'desc': '(미사용)'},
-    {'emoji': '😀', 'label': 'A급', 'desc': '(사용감 적음)'},
-    {'emoji': '😐', 'label': 'B급', 'desc': '(사용감 있음)'},
+    {'emoji': '♻️', 'label': '중고', 'desc': '(사용감 있음)'},
   ];
 
   @override
@@ -140,6 +139,25 @@ class _SellScreenState extends State<SellScreen> {
     });
   }
 
+  List<String> _resolveTradeMethods() {
+    return _tradeMethods
+        .where((method) => _selectedTradeMethods.contains(method))
+        .toList();
+  }
+
+  void _toggleTradeMethod(String method) {
+    setState(() {
+      if (_selectedTradeMethods.contains(method)) {
+        _selectedTradeMethods.remove(method);
+        if (method == '직거래') {
+          _selectedTradeLocationKey = null;
+        }
+      } else {
+        _selectedTradeMethods.add(method);
+      }
+    });
+  }
+
   Future<void> _submitProduct() async {
     final title = _titleController.text.trim();
     final priceText = _priceController.text.replaceAll(',', '').trim();
@@ -160,6 +178,22 @@ class _SellScreenState extends State<SellScreen> {
       return;
     }
 
+    final selectedTradeMethods = _resolveTradeMethods();
+    if (selectedTradeMethods.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('거래 방식을 선택해주세요.')),
+      );
+      return;
+    }
+    if (selectedTradeMethods.contains('직거래') &&
+        (_selectedTradeLocationKey == null ||
+            _selectedTradeLocationKey!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('직거래 선택 시 리조트를 선택해주세요.')),
+      );
+      return;
+    }
+
     final currentUser = context.read<UserService>().currentUser;
     if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -167,6 +201,10 @@ class _SellScreenState extends State<SellScreen> {
       );
       return;
     }
+
+    final productService = context.read<ProductService>();
+    final mainTabProvider = context.read<MainTabProvider>();
+    final navigator = Navigator.of(context);
 
     setState(() => _isUploading = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -227,20 +265,22 @@ class _SellScreenState extends State<SellScreen> {
         sellerName: sellerName,
         sellerProfile: sellerProfile,
         sellerId: currentUser.uid,
-        tradeLocationKey: _selectedTradeLocationKey ?? '',
+        tradeMethods: selectedTradeMethods,
+        tradeLocationKey: selectedTradeMethods.contains('직거래')
+            ? _selectedTradeLocationKey ?? ''
+            : '',
       );
 
-      await context.read<ProductService>().addProduct(product, images: _selectedImages);
+      await productService.addProduct(product, images: _selectedImages);
 
       if (!mounted) return;
-      context.read<ProductService>().resetPagination();
+      productService.resetPagination();
       _clearForm();
 
-      final navigator = Navigator.of(context);
       if (navigator.canPop()) {
         navigator.pop();
       } else {
-        context.read<MainTabProvider>().setIndex(0);
+        mainTabProvider.setIndex(0);
       }
       messenger.showSnackBar(const SnackBar(content: Text('등록 완료!')));
     } on FirebaseException catch (error, stackTrace) {
@@ -268,6 +308,7 @@ class _SellScreenState extends State<SellScreen> {
       _selectedSpecs.clear();
       _selectedCondition = null;
       _selectedTradeLocationKey = null;
+      _selectedTradeMethods.clear();
     });
   }
 
@@ -283,6 +324,9 @@ class _SellScreenState extends State<SellScreen> {
             // 폼 컨텐츠
             Expanded(
               child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -295,9 +339,14 @@ class _SellScreenState extends State<SellScreen> {
                     // 카테고리별 상세 옵션
                     _buildCategorySpecificFields(),
                     _buildThickDivider(),
-                    // 거래 희망 장소
-                    _buildTradeLocationSection(),
+                    // 거래 방식
+                    _buildTradeMethodSection(),
                     _buildThickDivider(),
+                    // 직거래 리조트
+                    if (_selectedTradeMethods.contains('직거래'))
+                      _buildTradeLocationSection(),
+                    if (_selectedTradeMethods.contains('직거래'))
+                      _buildThickDivider(),
                     // 상품 상태
                     _buildConditionSection(),
                     _buildThickDivider(),
@@ -647,7 +696,7 @@ class _SellScreenState extends State<SellScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '거래 희망 장소',
+            '직거래 리조트',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -656,25 +705,11 @@ class _SellScreenState extends State<SellScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            '도시 또는 리조트 중 1개를 선택해주세요.',
+            '직거래 선택 시 리조트를 1개 선택해주세요.',
             style: TextStyle(
               fontSize: 12,
               color: textGrey,
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '도시',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: textDark,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _buildLocationChips(
-            options: TradeLocationConstants.cities,
-            prefix: 'city',
           ),
           const SizedBox(height: 16),
           const Text(
@@ -689,6 +724,62 @@ class _SellScreenState extends State<SellScreen> {
           _buildLocationChips(
             options: TradeLocationConstants.resorts,
             prefix: 'resort',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTradeMethodSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '거래 방식',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: textDark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '중복 선택이 가능합니다.',
+            style: TextStyle(
+              fontSize: 12,
+              color: textGrey,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _tradeMethods.map((method) {
+              final isSelected = _selectedTradeMethods.contains(method);
+              return GestureDetector(
+                onTap: () => _toggleTradeMethod(method),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? primaryBlue : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? primaryBlue : Colors.grey[300]!,
+                    ),
+                  ),
+                  child: Text(
+                    method,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : textGrey,
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),

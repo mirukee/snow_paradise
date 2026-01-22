@@ -232,9 +232,12 @@ class _MyScreenState extends State<MyScreen> {
     BuildContext context,
     Product product,
   ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final productService = context.read<ProductService>();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('상품 삭제'),
         content: const Text('정말 이 상품을 삭제하시겠어요? 삭제 후 복구할 수 없습니다.'),
         actions: [
@@ -255,20 +258,26 @@ class _MyScreenState extends State<MyScreen> {
 
     final docId = product.docId?.trim() ?? '';
     if (docId.isEmpty) {
-      _showSnackBar(context, '상품 정보를 찾을 수 없습니다.');
+      messenger.showSnackBar(
+        const SnackBar(content: Text('상품 정보를 찾을 수 없습니다.')),
+      );
       return;
     }
 
     try {
-      await context.read<ProductService>().deleteProduct(
+      await productService.deleteProduct(
             docId,
             product.imageUrl,
           );
       if (!mounted) return;
-      _showSnackBar(context, '상품이 삭제되었습니다.');
+      messenger.showSnackBar(
+        const SnackBar(content: Text('상품이 삭제되었습니다.')),
+      );
     } catch (_) {
       if (!mounted) return;
-      _showSnackBar(context, '상품 삭제에 실패했어요.');
+      messenger.showSnackBar(
+        const SnackBar(content: Text('상품 삭제에 실패했어요.')),
+      );
     }
   }
 
@@ -307,7 +316,7 @@ class _MyScreenState extends State<MyScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
             child: Container(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
         ),
@@ -512,7 +521,7 @@ class _MyScreenState extends State<MyScreen> {
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                         child: Container(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                         ),
                       ),
                     ),
@@ -638,7 +647,7 @@ class _MyScreenState extends State<MyScreen> {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -660,7 +669,7 @@ class _MyScreenState extends State<MyScreen> {
                       border: Border.all(color: Colors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
+                          color: Colors.black.withValues(alpha: 0.08),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -682,7 +691,7 @@ class _MyScreenState extends State<MyScreen> {
                         border: Border.all(color: _borderLight),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
+                            color: Colors.black.withValues(alpha: 0.04),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
@@ -882,7 +891,7 @@ class _MyScreenState extends State<MyScreen> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -948,7 +957,7 @@ class _MyScreenState extends State<MyScreen> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
@@ -83,12 +84,14 @@ class ProductService extends ChangeNotifier {
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
     FirebaseAuth? auth,
+    FirebaseFunctions? functions,
     bool isAdmin = false,
     int latestLimit = 200,
   })
       : _firestore = firestore ?? FirebaseFirestore.instance,
         _storage = storage ?? FirebaseStorage.instance,
         _auth = auth ?? FirebaseAuth.instance,
+        _functions = functions ?? FirebaseFunctions.instance,
         _isAdmin = isAdmin,
         _latestLimit = latestLimit {
     _listenToAuthChanges();
@@ -98,6 +101,7 @@ class ProductService extends ChangeNotifier {
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
   final FirebaseAuth _auth;
+  final FirebaseFunctions _functions;
   final bool _isAdmin;
   final int _latestLimit;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _productsSubscription;
@@ -123,6 +127,12 @@ class ProductService extends ChangeNotifier {
   static const int _priceBucketSize = 100000;
   static const int _lengthBucketSize = 5;
   static const int _maxWhereInValues = 10;
+  static const List<String> _brandAttributeKeys = [
+    CategoryAttributes.ATTR_BRAND_SKI,
+    CategoryAttributes.ATTR_BRAND_BOARD,
+    CategoryAttributes.ATTR_BRAND_APPAREL,
+    CategoryAttributes.ATTR_BRAND_GEAR,
+  ];
 
   List<Product> _adminBaseProducts = [];
   List<Product> _adminExtraProducts = [];
@@ -361,6 +371,11 @@ class ProductService extends ChangeNotifier {
 
   // 새 상품을 리스트 맨 앞에 추가
   Future<void> addProduct(Product product, {List<XFile>? images}) async {
+    final ownerId = _auth.currentUser?.uid ?? product.sellerId;
+    if (ownerId.trim().isEmpty) {
+      throw StateError('로그인이 필요합니다.');
+    }
+
     // 여러 이미지 업로드 처리
     final List<String> uploadedImageUrls = [];
     
@@ -377,10 +392,11 @@ class ProductService extends ChangeNotifier {
 
       final fileName =
           '${DateTime.now().millisecondsSinceEpoch}_${product.id}_$i.jpg'; // 항상 .jpg 확장자 사용
-      final ref = _storage.ref().child('uploads/$fileName');
+      final ref = _storage.ref().child('uploads/$ownerId/$fileName');
 
       // 메타데이터 없이 데이터 업로드
-      await ref.putData(compressedBytes);
+      final metadata = SettableMetadata(contentType: 'image/jpeg');
+      await ref.putData(compressedBytes, metadata);
 
       final downloadUrl = await ref.getDownloadURL();
       uploadedImageUrls.add(downloadUrl);
@@ -407,6 +423,7 @@ class ProductService extends ChangeNotifier {
       'sellerName': product.sellerName,
       'sellerProfile': product.sellerProfile,
       'sellerId': product.sellerId,
+      'tradeMethods': product.tradeMethods,
       'status': product.status.firestoreValue,
       'likeCount': product.likeCount,
       'chatCount': product.chatCount,
@@ -436,6 +453,7 @@ class ProductService extends ChangeNotifier {
       'year': updatedProduct.year,
       'subCategory': updatedProduct.subCategory, // 소분류 업데이트
       'specs': updatedProduct.specs, // 상세 스펙 업데이트
+      'tradeMethods': updatedProduct.tradeMethods,
       ...searchFields,
     });
   }
@@ -824,7 +842,7 @@ class ProductService extends ChangeNotifier {
       if (filterVal.length != 1) {
         return null;
       }
-      return _normalizeTokenValue(filterVal.first.toString());
+      return _normalizeFilterValue(attributeKey, filterVal.first.toString());
     }
 
     if (filterVal is Map) {
@@ -832,7 +850,7 @@ class ProductService extends ChangeNotifier {
     }
 
     if (filterVal is String) {
-      return _normalizeTokenValue(filterVal);
+      return _normalizeFilterValue(attributeKey, filterVal);
     }
 
     return null;
@@ -967,7 +985,7 @@ class ProductService extends ChangeNotifier {
         continue;
       }
       final rawValue = product.specs[attrKey];
-      values[tokenKey] = _normalizeTokenValue(rawValue);
+      values[tokenKey] = _normalizeFilterValue(attrKey, rawValue);
     }
 
     values['loc'] = _normalizeTokenValue(product.tradeLocationKey);
@@ -1025,6 +1043,21 @@ class ProductService extends ChangeNotifier {
       return null;
     }
     return normalized;
+  }
+
+  String? _normalizeFilterValue(String attributeKey, String? value) {
+    if (!_brandAttributeKeys.contains(attributeKey)) {
+      return _normalizeTokenValue(value);
+    }
+    return _normalizeBrandValue(value);
+  }
+
+  String? _normalizeBrandValue(String? value) {
+    if (value == null) {
+      return null;
+    }
+    final withoutParens = value.replaceAll(RegExp(r'\s*\(.*?\)\s*'), ' ');
+    return _normalizeTokenValue(withoutParens);
   }
 
   Future<QuerySnapshot<Map<String, dynamic>>> _runPagedQuery({
@@ -1125,16 +1158,26 @@ class ProductService extends ChangeNotifier {
         if (filterVal is String && filterVal.isEmpty) continue;
         if (filterVal is List && filterVal.isEmpty) continue;
 
-        final productVal = product.specs[filterKey];
-        if (productVal == null) return false;
+      final productVal = product.specs[filterKey];
+      if (productVal == null) return false;
 
-        if (filterVal is List) {
+      if (filterVal is List) {
+        if (_brandAttributeKeys.contains(filterKey)) {
+          final normalizedProduct = _normalizeBrandValue(productVal);
+          if (normalizedProduct == null) return false;
+          final normalizedFilters = filterVal
+              .map((value) => _normalizeBrandValue(value.toString()))
+              .whereType<String>()
+              .toSet();
+          if (!normalizedFilters.contains(normalizedProduct)) return false;
+        } else {
           if (!filterVal.contains(productVal)) return false;
-        } else if (filterVal is Map) {
-          final minStr = filterVal['min'] as String?;
-          final maxStr = filterVal['max'] as String?;
-          try {
-            String pValStr =
+        }
+      } else if (filterVal is Map) {
+        final minStr = filterVal['min'] as String?;
+        final maxStr = filterVal['max'] as String?;
+        try {
+          String pValStr =
                 productVal.replaceAll(RegExp(r'[^0-9.]'), '');
             if (pValStr.isEmpty) return false;
 
@@ -1152,7 +1195,17 @@ class ProductService extends ChangeNotifier {
             return false;
           }
         } else {
-          if (productVal != filterVal) return false;
+          if (_brandAttributeKeys.contains(filterKey)) {
+            final normalizedProduct = _normalizeBrandValue(productVal);
+            final normalizedFilter = _normalizeBrandValue(filterVal.toString());
+            if (normalizedProduct == null ||
+                normalizedFilter == null ||
+                normalizedProduct != normalizedFilter) {
+              return false;
+            }
+          } else {
+            if (productVal != filterVal) return false;
+          }
         }
       }
 
@@ -1255,7 +1308,7 @@ class ProductService extends ChangeNotifier {
       if (definition == null) continue;
       for (final brand in definition.options) {
         if (suggestions.length >= 10) break;
-        if (brand == '기타') continue; // '기타'는 제외
+        if (brand.contains('기타')) continue; // '기타'는 제외
         final uniqueKey = '${brand}_$key';
         if (brand.toLowerCase().contains(normalizedQuery) && !addedKeys.contains(uniqueKey)) {
           suggestions.add(SearchSuggestion(
@@ -1337,28 +1390,9 @@ class ProductService extends ChangeNotifier {
     final normalized = keyword.trim().toLowerCase();
     if (normalized.isEmpty || normalized.length < 2) return;
 
-    final docRef = _firestore.collection('search_keywords').doc(normalized);
-    
     try {
-      await _firestore.runTransaction((transaction) async {
-        final snapshot = await transaction.get(docRef);
-        
-        if (snapshot.exists) {
-          // 기존 검색어: 카운트 증가
-          transaction.update(docRef, {
-            'count': FieldValue.increment(1),
-            'lastSearchedAt': FieldValue.serverTimestamp(),
-          });
-        } else {
-          // 새 검색어: 문서 생성
-          transaction.set(docRef, {
-            'keyword': normalized,
-            'count': 1,
-            'createdAt': FieldValue.serverTimestamp(),
-            'lastSearchedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      });
+      final callable = _functions.httpsCallable('recordSearchKeyword');
+      await callable.call({'keyword': normalized});
     } catch (_) {
       // 검색어 기록 실패는 무시 (사용자 경험에 영향 없음)
     }

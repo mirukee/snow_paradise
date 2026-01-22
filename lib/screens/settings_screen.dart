@@ -11,6 +11,7 @@ class SettingsScreen extends StatelessWidget {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('회원 탈퇴'),
         content: const Text('정말 탈퇴하시겠습니까? 모든 데이터가 삭제됩니다.'),
         actions: [
@@ -34,8 +35,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentUser = context.watch<UserService>().currentUser;
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
 
     if (currentUser == null) {
       return Scaffold(
@@ -92,6 +91,10 @@ class SettingsScreen extends StatelessWidget {
                         return;
                       }
 
+                      if (!context.mounted) return;
+                      final userService = context.read<UserService>();
+                      final messenger = ScaffoldMessenger.of(context);
+
                       showDialog(
                         context: context,
                         barrierDismissible: false,
@@ -101,16 +104,16 @@ class SettingsScreen extends StatelessWidget {
                       );
 
                       try {
-                        await context.read<UserService>().deleteAccount();
+                        await userService.deleteAccount();
                         if (!context.mounted) return;
-                        navigator.pop();
+                        Navigator.pop(context);
                         messenger.showSnackBar(
                           const SnackBar(content: Text('회원 탈퇴가 완료되었습니다.')),
                         );
-                        navigator.pop();
+                        Navigator.pop(context);
                       } on FirebaseAuthException catch (error) {
                         if (!context.mounted) return;
-                        navigator.pop();
+                        Navigator.pop(context);
                         messenger.showSnackBar(
                           SnackBar(
                             content: Text(
@@ -120,7 +123,7 @@ class SettingsScreen extends StatelessWidget {
                         );
                       } catch (_) {
                         if (!context.mounted) return;
-                        navigator.pop();
+                        Navigator.pop(context);
                         messenger.showSnackBar(
                           const SnackBar(content: Text('회원 탈퇴에 실패했습니다.')),
                         );

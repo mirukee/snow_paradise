@@ -178,26 +178,29 @@ class _AdminProductListScreenState extends State<AdminProductListScreen> {
   }
 
   Future<void> _updateStatus(BuildContext context, Product product, ProductStatus status) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final productService = context.read<ProductService>();
     try {
-      await context.read<ProductService>().updateProductStatus(product.id, status);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Updated to ${status.name}')),
-        );
-      }
+      await productService.updateProductStatus(product.id, status);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Updated to ${status.name}')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 
   Future<void> _confirmDelete(BuildContext context, Product product) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final productService = context.read<ProductService>();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete Product'),
         content: Text('Are you sure you want to delete "${product.title}"? This cannot be undone.'),
         actions: [
@@ -215,18 +218,16 @@ class _AdminProductListScreenState extends State<AdminProductListScreen> {
 
     try {
       // Assuming removeProduct exists and takes ID
-      await context.read<ProductService>().removeProduct(product.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product deleted')),
-        );
-      }
+      await productService.removeProduct(product.id);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Product deleted')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 }

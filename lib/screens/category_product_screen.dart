@@ -487,6 +487,7 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
       return;
     }
 
+    final productService = context.read<ProductService>();
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -498,12 +499,13 @@ class _CategoryProductScreenState extends State<CategoryProductScreen> {
       ),
     );
 
+    if (!mounted) return;
     if (result != null) {
       setState(() {
         _filterSpecs = result;
       });
       _refreshProducts(
-        context.read<ProductService>(),
+        productService,
         force: true,
       );
     }
@@ -542,6 +544,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: const BoxDecoration(
@@ -593,7 +596,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
           // 필터 컨텐츠
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomInset),
               child: DynamicAttributeForm(
                 category: widget.category,
                 subCategory: widget.subCategory,
@@ -609,7 +612,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
           ),
           // 적용 버튼
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + bottomInset),
             child: SizedBox(
               width: double.infinity,
               height: 56,

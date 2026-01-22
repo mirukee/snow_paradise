@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:html' as html;
-import 'dart:js_util' as js_util;
+import 'dart:js' as js;
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -26,17 +26,40 @@ class HeicConverter {
       final blob = html.Blob([bytes], 'image/heic');
       
       // index.html에 정의된 JS 함수 호출
-      // convertHeicToJpeg(blob) -> returns Blob
-      final promise = js_util.callMethod(html.window, 'convertHeicToJpeg', [blob]);
-      final resultBlob = await js_util.promiseToFuture(promise);
-      
-      if (resultBlob is html.Blob) {
-        // Blob을 Uint8List로 변환
-        final reader = html.FileReader();
-        reader.readAsArrayBuffer(resultBlob);
-        await reader.onLoad.first;
-        return reader.result as Uint8List;
+      // convertHeicToJpeg(blob) -> Promise<Blob>
+      final promise = js.context.callMethod('convertHeicToJpeg', [blob]);
+      if (promise == null) {
+        return null;
       }
+
+      final jsPromise = js.JsObject.fromBrowserObject(promise);
+      if (!jsPromise.hasProperty('then')) {
+        return null;
+      }
+
+      final completer = Completer<html.Blob?>();
+      final onResolve = js.JsFunction.withThis((_, result) {
+        if (!completer.isCompleted) {
+          completer.complete(result is html.Blob ? result : null);
+        }
+      });
+      final onReject = js.JsFunction.withThis((_, error) {
+        if (!completer.isCompleted) {
+          completer.completeError(error);
+        }
+      });
+      jsPromise.callMethod('then', [onResolve, onReject]);
+
+      final resultBlob = await completer.future;
+      if (resultBlob == null) {
+        return null;
+      }
+
+      // Blob을 Uint8List로 변환
+      final reader = html.FileReader();
+      reader.readAsArrayBuffer(resultBlob);
+      await reader.onLoad.first;
+      return reader.result as Uint8List;
     } catch (e) {
       debugPrint('HEIC conversion error: $e');
     }

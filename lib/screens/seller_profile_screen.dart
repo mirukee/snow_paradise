@@ -732,7 +732,7 @@ class _SellerProductCard extends StatelessWidget {
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.55),
+                            color: Colors.black.withValues(alpha: 0.55),
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: Center(
@@ -746,7 +746,7 @@ class _SellerProductCard extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.85),
+                                    color: Colors.white.withValues(alpha: 0.85),
                                     width: 2,
                                   ),
                                 ),
@@ -773,7 +773,7 @@ class _SellerProductCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.9),
+                            color: Colors.green.withValues(alpha: 0.9),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: const Text(
@@ -790,7 +790,7 @@ class _SellerProductCard extends StatelessWidget {
                       top: 8,
                       right: 8,
                       child: Material(
-                        color: Colors.black.withOpacity(0.25),
+                        color: Colors.black.withValues(alpha: 0.25),
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),

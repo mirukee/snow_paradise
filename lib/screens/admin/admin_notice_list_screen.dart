@@ -94,6 +94,7 @@ class _AdminNoticeListScreenState extends State<AdminNoticeListScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(notice == null ? 'Add Notice' : 'Edit Notice'),
         content: SizedBox(
           width: 500,

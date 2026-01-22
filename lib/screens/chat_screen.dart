@@ -55,6 +55,7 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
+          scrollable: true,
           title: const Text('신고 사유'),
           content: TextField(
             maxLines: 3,
@@ -94,6 +95,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Text(message),
         actions: [
@@ -170,10 +172,11 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       _hasMore = false;
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isFetchingMore = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isFetchingMore = false;
+        });
+      }
     }
   }
 
@@ -521,6 +524,8 @@ class _ChatScreenState extends State<ChatScreen> {
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     final roomId = widget.room.roomId;
+    final chatService = context.read<ChatService>();
+    final navigator = Navigator.of(context);
 
     if (currentUserId == null || currentUserId.isEmpty) {
       messenger.showSnackBar(
@@ -576,7 +581,8 @@ class _ChatScreenState extends State<ChatScreen> {
         messenger.showSnackBar(
           const SnackBar(content: Text('사용자를 차단했어요.')),
         );
-        if (mounted) Navigator.pop(context);
+        if (!mounted) return;
+        navigator.pop();
       } catch (_) {
         messenger.showSnackBar(
           const SnackBar(content: Text('차단에 실패했어요.')),
@@ -598,11 +604,12 @@ class _ChatScreenState extends State<ChatScreen> {
         if (targetRoomId.isEmpty) {
           throw StateError('채팅방 정보를 찾을 수 없습니다.');
         }
-        await context.read<ChatService>().leaveChatRoom(targetRoomId);
+        await chatService.leaveChatRoom(targetRoomId);
         messenger.showSnackBar(
           const SnackBar(content: Text('채팅방을 나갔어요.')),
         );
-        if (mounted) Navigator.pop(context);
+        if (!mounted) return;
+        navigator.pop();
       } catch (_) {
         messenger.showSnackBar(
           const SnackBar(content: Text('채팅방 나가기에 실패했어요.')),

@@ -11,132 +11,151 @@ class LoginScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(), // 위쪽 여백 자동 조절
-
-              // 1. 로고 영역
-              // 실제 로고 이미지가 있다면 Image.asset을 쓰세요.
-              // 지금은 텍스트와 아이콘으로 멋을 냈습니다.
-              Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.ac_unit, // 눈꽃 아이콘
-                      size: 60,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Snow Paradise',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900, // 아주 굵게
-                      letterSpacing: 1.5, // 자간 넓게
-                      fontFamily: 'Roboto', // 폰트는 기본 폰트
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '설원 위의 모든 거래',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Spacer(), // 위쪽 여백 자동 조절
 
-              const Spacer(), // 중간 여백
+                        // 1. 로고 영역
+                        // 실제 로고 이미지가 있다면 Image.asset을 쓰세요.
+                        // 지금은 텍스트와 아이콘으로 멋을 냈습니다.
+                        Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .primaryColor
+                                    .withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.ac_unit, // 눈꽃 아이콘
+                                size: 60,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            const Text(
+                              'Snow Paradise',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900, // 아주 굵게
+                                letterSpacing: 1.5, // 자간 넓게
+                                fontFamily: 'Roboto', // 폰트는 기본 폰트
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '설원 위의 모든 거래',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
 
-              // 2. 소셜 로그인 버튼들
-              
-              // 카카오 로그인
-              _buildLoginButton(
-                onPressed: () => _goToMain(context),
-                backgroundColor: const Color(0xFFFEE500), // 카카오 노란색
-                text: '카카오로 시작하기',
-                textColor: Colors.black.withOpacity(0.85),
-                icon: Icons.chat_bubble, // 카카오톡 아이콘 대신 말풍선
-              ),
-              const SizedBox(height: 12),
+                        const Spacer(), // 중간 여백
 
-              // 구글 로그인
-              _buildLoginButton(
-                onPressed: () => _goToMain(context),
-                backgroundColor: Colors.white,
-                text: 'Google로 시작하기',
-                textColor: Colors.black,
-                icon: Icons.g_mobiledata, // 구글 아이콘 대체
-                hasBorder: true,
-              ),
-              const SizedBox(height: 4),
-              TextButton(
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  try {
-                    final user =
-                        await context.read<UserService>().signInAnonymously();
-                    if (user == null) {
-                      return;
-                    }
-                    if (!context.mounted) return;
-                    _goToMain(context);
-                  } catch (_) {
-                    if (!context.mounted) return;
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('게스트 로그인에 실패했습니다.')),
-                    );
-                  }
-                },
-                child: Text(
-                  '게스트로 체험하기',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                    decoration: TextDecoration.underline,
+                        // 2. 소셜 로그인 버튼들
+
+                        // 카카오 로그인
+                        _buildLoginButton(
+                          onPressed: () => _goToMain(context),
+                          backgroundColor: const Color(0xFFFEE500), // 카카오 노란색
+                          text: '카카오로 시작하기',
+                          textColor: Colors.black.withValues(alpha: 0.85),
+                          icon: Icons.chat_bubble, // 카카오톡 아이콘 대신 말풍선
+                        ),
+                        const SizedBox(height: 12),
+
+                        // 구글 로그인
+                        _buildLoginButton(
+                          onPressed: () => _goToMain(context),
+                          backgroundColor: Colors.white,
+                          text: 'Google로 시작하기',
+                          textColor: Colors.black,
+                          icon: Icons.g_mobiledata, // 구글 아이콘 대체
+                          hasBorder: true,
+                        ),
+                        const SizedBox(height: 4),
+                        TextButton(
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            try {
+                              final user = await context
+                                  .read<UserService>()
+                                  .signInAnonymously();
+                              if (user == null) {
+                                return;
+                              }
+                              if (!context.mounted) return;
+                              _goToMain(context);
+                            } catch (_) {
+                              if (!context.mounted) return;
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('게스트 로그인에 실패했습니다.'),
+                                ),
+                              );
+                            }
+                          },
+                          child: Text(
+                            '게스트로 체험하기',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // 애플 로그인
+                        _buildLoginButton(
+                          onPressed: () => _goToMain(context),
+                          backgroundColor: Colors.black,
+                          text: 'Apple로 시작하기',
+                          textColor: Colors.white,
+                          icon: Icons.apple,
+                        ),
+
+                        const SizedBox(height: 40),
+
+                        // 3. 둘러보기 (로그인 없이 입장)
+                        TextButton(
+                          onPressed: () => _goToMain(context),
+                          child: Text(
+                            '로그인 없이 둘러보기',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-
-              // 애플 로그인
-              _buildLoginButton(
-                onPressed: () => _goToMain(context),
-                backgroundColor: Colors.black,
-                text: 'Apple로 시작하기',
-                textColor: Colors.white,
-                icon: Icons.apple,
-              ),
-
-              const SizedBox(height: 40),
-              
-              // 3. 둘러보기 (로그인 없이 입장)
-              TextButton(
-                onPressed: () => _goToMain(context),
-                child: Text(
-                  '로그인 없이 둘러보기',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

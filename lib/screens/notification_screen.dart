@@ -72,6 +72,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
+                    scrollable: true,
                     title: const Text('알림 전체 삭제'),
                     content: const Text('모든 알림을 삭제하시겠습니까?'),
                     actions: [

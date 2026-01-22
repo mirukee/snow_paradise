@@ -27,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _getStatusBadge(String condition) {
-    return condition == '거의 새것' ? 'New' : 'S급';
+    return condition == '새상품' ? 'New' : 'Used';
   }
 
   void _toggleFavorite(String productId) {
@@ -155,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.7),
+                              color: Colors.black.withValues(alpha: 0.7),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.4),
+                                color: Colors.black.withValues(alpha: 0.4),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(

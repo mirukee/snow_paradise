@@ -119,13 +119,13 @@ class _MainScreenState extends State<MainScreen> {
               child: Container(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
+                  color: Colors.white.withValues(alpha: 0.95),
                   border: const Border(
                     top: BorderSide(color: Color(0xFFE2E8F0)),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
+                      color: Colors.black.withValues(alpha: 0.06),
                       blurRadius: 16,
                       offset: const Offset(0, -6),
                     ),
@@ -275,7 +275,7 @@ class _MainScreenState extends State<MainScreen> {
     return Material(
       color: backgroundColor,
       elevation: 10,
-      shadowColor: backgroundColor.withOpacity(0.35),
+      shadowColor: backgroundColor.withValues(alpha: 0.35),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,

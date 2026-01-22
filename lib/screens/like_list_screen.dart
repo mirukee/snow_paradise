@@ -112,11 +112,12 @@ class _LikeListScreenState extends State<LikeListScreen> {
         _hasMore = result.hasMore;
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _isLoadingMore = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isLoadingMore = false;
+        });
+      }
     }
   }
 
@@ -351,11 +352,11 @@ class _ConditionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badgeColor = condition == '거의 새것' ? Colors.green : Colors.orange;
+    final badgeColor = condition == '새상품' ? Colors.green : Colors.orange;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: badgeColor.withOpacity(0.15),
+        color: badgeColor.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -416,7 +417,7 @@ class _EmptyState extends StatelessWidget {
             Icon(
               Icons.favorite_border,
               size: 64,
-              color: primaryColor.withOpacity(0.3),
+              color: primaryColor.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 12),
             const Text(

@@ -40,9 +40,12 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
   }
 
   Future<void> _toggleBan(UserModel user) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final userService = context.read<UserService>();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(user.isBanned ? '정지 해제' : '사용자 정지'),
         content: Text('${user.nickname}님을 ${user.isBanned ? '정지 해제' : '정지'} 하시겠습니까?'),
         actions: [
@@ -62,21 +65,17 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
     if (confirm != true) return;
 
     try {
-      await context
-          .read<UserService>()
-          .updateUserBanStatus(user.uid, !user.isBanned);
+      await userService.updateUserBanStatus(user.uid, !user.isBanned);
       await _loadUsers(); // Refresh list
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('상태가 변경되었습니다.')),
-        );
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('상태가 변경되었습니다.')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('작업 실패: $e')),
-        );
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('작업 실패: $e')),
+      );
     }
   }
 

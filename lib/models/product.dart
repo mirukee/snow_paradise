@@ -81,6 +81,7 @@ class Product {
   final String sellerName;
   final String sellerProfile;
   final String sellerId;
+  final List<String> tradeMethods;
   final String tradeLocationKey;
   final ProductStatus status;
   final int likeCount;
@@ -116,6 +117,7 @@ class Product {
     required this.sellerName,
     required this.sellerProfile,
     required this.sellerId,
+    this.tradeMethods = const [],
     this.tradeLocationKey = '',
     this.status = ProductStatus.forSale,
     this.likeCount = 0,
@@ -184,6 +186,7 @@ class Product {
       sellerName: json['sellerName']?.toString() ?? '',
       sellerProfile: json['sellerProfile']?.toString() ?? '',
       sellerId: json['sellerId']?.toString() ?? '',
+      tradeMethods: _parseTradeMethods(json['tradeMethods']),
       tradeLocationKey: json['tradeLocationKey']?.toString() ?? '',
       status: productStatusFromString(json['status']?.toString()),
       likeCount: parseCount(json['likeCount']),
@@ -211,10 +214,26 @@ class Product {
       'sellerName': sellerName,
       'sellerProfile': sellerProfile,
       'sellerId': sellerId,
+      'tradeMethods': tradeMethods,
       'tradeLocationKey': tradeLocationKey,
       'status': status.firestoreValue,
       'likeCount': likeCount,
       'chatCount': chatCount,
     };
   }
+}
+
+List<String> _parseTradeMethods(dynamic raw) {
+  if (raw is Iterable) {
+    return raw
+        .map((value) => value.toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+  if (raw is String) {
+    final normalized = raw.trim();
+    return normalized.isEmpty ? [] : [normalized];
+  }
+  return [];
 }

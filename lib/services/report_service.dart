@@ -1,10 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ReportService {
-  ReportService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  ReportService({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+    FirebaseAuth? auth,
+  })
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance,
+        _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
+  final FirebaseAuth _auth;
 
   Future<void> reportItem({
     required String reporterUid,
@@ -26,13 +36,16 @@ class ReportService {
       throw StateError('신고 사유를 입력해 주세요.');
     }
 
-    await _firestore.collection('reports').add({
-      'reporterUid': trimmedReporter,
+    final currentUid = _auth.currentUser?.uid;
+    if (currentUid == null || currentUid != trimmedReporter) {
+      throw StateError('로그인이 필요합니다.');
+    }
+
+    final callable = _functions.httpsCallable('createReport');
+    await callable.call({
       'targetUid': trimmedTarget,
       'targetContentId': trimmedContentId,
       'reason': trimmedReason,
-      'status': 'pending', // 신고 상태: pending, resolved
-      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 

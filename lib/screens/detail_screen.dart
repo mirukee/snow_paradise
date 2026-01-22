@@ -57,6 +57,7 @@ class _DetailScreenState extends State<DetailScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
+          scrollable: true,
           title: const Text('신고 사유'),
           content: TextField(
             maxLines: 3,
@@ -91,6 +92,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('사용자 차단'),
         content: const Text('이 사용자를 차단하시겠어요?'),
         actions: [
@@ -152,6 +154,7 @@ class _DetailScreenState extends State<DetailScreen> {
     required String currentUserId,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     if (product.sellerId.isEmpty) {
       messenger.showSnackBar(
         const SnackBar(content: Text('차단 대상을 찾을 수 없습니다.')),
@@ -172,9 +175,8 @@ class _DetailScreenState extends State<DetailScreen> {
       messenger.showSnackBar(
         const SnackBar(content: Text('사용자를 차단했어요.')),
       );
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      if (!mounted) return;
+      navigator.pop();
     } catch (_) {
       messenger.showSnackBar(
         const SnackBar(content: Text('차단에 실패했어요.')),
@@ -227,7 +229,7 @@ class _DetailScreenState extends State<DetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -315,6 +317,13 @@ class _DetailScreenState extends State<DetailScreen> {
     final displayStatus = _overrideStatus ?? currentProduct.status;
     final tradeLocationText =
         _formatTradeLocation(currentProduct.tradeLocationKey);
+    final resolvedTradeMethods = currentProduct.tradeMethods.isNotEmpty
+        ? currentProduct.tradeMethods
+        : (currentProduct.tradeLocationKey.trim().isNotEmpty
+            ? ['직거래']
+            : <String>[]);
+    final tradeMethodLabel = resolvedTradeMethods.join(' · ');
+    final hasDirectTrade = resolvedTradeMethods.contains('직거래');
     final isLiked = productService.isLiked(currentProduct.id);
     final hasEngagement =
         currentProduct.likeCount > 0 || currentProduct.chatCount > 0;
@@ -509,7 +518,7 @@ class _DetailScreenState extends State<DetailScreen> {
                           border: Border.all(color: softBorder),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
+                              color: Colors.black.withValues(alpha: 0.04),
                               blurRadius: 12,
                               offset: const Offset(0, 6),
                             ),
@@ -701,6 +710,8 @@ class _DetailScreenState extends State<DetailScreen> {
                             _buildDetailChip('연식: ${currentProduct.year}'),
                           if (currentProduct.brand.isNotEmpty)
                             _buildDetailChip('브랜드: ${currentProduct.brand}'),
+                          if (tradeMethodLabel.isNotEmpty)
+                            _buildDetailChip('거래: $tradeMethodLabel'),
                         ],
                       ),
                       const SizedBox(height: 24),
@@ -723,54 +734,56 @@ class _DetailScreenState extends State<DetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
-                        '거래 희망 장소',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: textDark,
+                      if (hasDirectTrade) ...[
+                        const Text(
+                          '거래 희망 장소',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: textDark,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: softSurface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: softBorder),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFEBEE),
-                                borderRadius: BorderRadius.circular(14),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: softSurface,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: softBorder),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFEBEE),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: const Icon(
+                                  Icons.location_on,
+                                  size: 16,
+                                  color: Colors.redAccent,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.location_on,
-                                size: 16,
-                                color: Colors.redAccent,
+                              const SizedBox(width: 10),
+                              Text(
+                                tradeLocationText,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: textDark,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              tradeLocationText,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: textDark,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 120),
                     ],
                   ),
@@ -844,7 +857,7 @@ class _DetailScreenState extends State<DetailScreen> {
             border: Border(top: BorderSide(color: Colors.grey.shade200)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 10,
                 offset: const Offset(0, -4),
               ),
@@ -918,14 +931,16 @@ class _DetailScreenState extends State<DetailScreen> {
             Expanded(
               child: OutlinedButton(
                 onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
+                  final messenger = ScaffoldMessenger.of(context);
+                  final navigator = Navigator.of(context);
+                  final result = await navigator.push(
                     MaterialPageRoute(
                       builder: (context) => EditProductScreen(product: product),
                     ),
                   );
                   if (result == true) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    if (!mounted) return;
+                    messenger.showSnackBar(
                       const SnackBar(content: Text('수정 완료!')),
                     );
                   }
@@ -954,9 +969,13 @@ class _DetailScreenState extends State<DetailScreen> {
             Expanded(
               child: ElevatedButton(
                 onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final productService = context.read<ProductService>();
+                  final navigator = Navigator.of(context);
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
+                      scrollable: true,
                       title: const Text('상품 삭제'),
                       content: const Text('정말 삭제하시겠어요?'),
                       actions: [
@@ -977,20 +996,17 @@ class _DetailScreenState extends State<DetailScreen> {
 
                   if (confirm != true) return;
 
-                  final messenger = ScaffoldMessenger.of(context);
                   try {
                     final docId = product.docId;
                     if (docId == null || docId.isEmpty) {
                       messenger.showSnackBar(
                         const SnackBar(content: Text('삭제에 실패했습니다.')),
-                      );
+                        );
                       return;
                     }
-                    await context
-                        .read<ProductService>()
-                        .deleteProduct(docId, product.imageUrl);
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
+                    await productService.deleteProduct(docId, product.imageUrl);
+                    if (!mounted) return;
+                    navigator.pop();
                     messenger.showSnackBar(
                       const SnackBar(content: Text('삭제 완료!')),
                     );

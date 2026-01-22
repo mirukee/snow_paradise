@@ -6,6 +6,10 @@ admin.initializeApp();
 
 const db = admin.firestore();
 const MAX_BODY_LENGTH = 80;
+const SEARCH_KEYWORD_RATE_WINDOW_MS = 60 * 1000;
+const SEARCH_KEYWORD_RATE_MAX = 20;
+const REPORT_RATE_WINDOW_MS = 10 * 60 * 1000;
+const REPORT_RATE_MAX = 5;
 
 function toCleanString(value) {
   if (value === null || value === undefined) {
@@ -53,6 +57,30 @@ function toNonNegativeInt(value) {
   return value < 0 ? 0 : Math.floor(value);
 }
 
+function resolveRateLimit(snapshot, nowMs, windowMs) {
+  if (!snapshot.exists) {
+    return { windowStart: nowMs, count: 0 };
+  }
+  const data = snapshot.data() || {};
+  const storedStart =
+    data.windowStart && typeof data.windowStart.toMillis === "function"
+      ? data.windowStart.toMillis()
+      : 0;
+  const storedCount = toNonNegativeInt(data.count);
+  if (storedStart > 0 && nowMs - storedStart < windowMs) {
+    return { windowStart: storedStart, count: storedCount };
+  }
+  return { windowStart: nowMs, count: 0 };
+}
+
+function rateLimitUpdate(windowStart, nextCount) {
+  return {
+    windowStart: admin.firestore.Timestamp.fromMillis(windowStart),
+    count: nextCount,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
 async function applyUnreadDelta(userId, delta) {
   const trimmedUserId = toCleanString(userId);
   if (!trimmedUserId || !delta) {
@@ -83,6 +111,128 @@ function toPasswordString(value) {
 function hashPassword(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
+
+exports.recordSearchKeyword = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "로그인이 필요합니다."
+    );
+  }
+
+  const keywordRaw = toCleanString(data && data.keyword);
+  const keyword = keywordRaw.trim().toLowerCase();
+  if (!keyword || keyword.length < 2 || keyword.length > 40) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "유효하지 않은 검색어입니다."
+    );
+  }
+
+  const docRef = db.collection("search_keywords").doc(keyword);
+  const rateRef = db.collection("search_keyword_limits").doc(context.auth.uid);
+  const nowMs = Date.now();
+  await db.runTransaction(async (transaction) => {
+    const rateSnapshot = await transaction.get(rateRef);
+    const state = resolveRateLimit(
+      rateSnapshot,
+      nowMs,
+      SEARCH_KEYWORD_RATE_WINDOW_MS
+    );
+    if (state.count >= SEARCH_KEYWORD_RATE_MAX) {
+      return;
+    }
+    transaction.set(
+      rateRef,
+      rateLimitUpdate(state.windowStart, state.count + 1),
+      { merge: true }
+    );
+
+    const snapshot = await transaction.get(docRef);
+    if (snapshot.exists) {
+      transaction.update(docRef, {
+        count: admin.firestore.FieldValue.increment(1),
+        lastSearchedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      transaction.set(docRef, {
+        keyword: keyword,
+        count: 1,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastSearchedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  });
+
+  return { success: true };
+});
+
+exports.createReport = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "로그인이 필요합니다."
+    );
+  }
+
+  const reporterUid = toCleanString(context.auth.uid);
+  const targetUid = toCleanString(data && data.targetUid).trim();
+  const targetContentId = toCleanString(data && data.targetContentId).trim();
+  const reason = toCleanString(data && data.reason).trim();
+  if (!reporterUid || !targetUid || !targetContentId) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "신고 정보를 찾을 수 없습니다."
+    );
+  }
+  if (!reason) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "신고 사유를 입력해 주세요."
+    );
+  }
+  if (reason.length > 500) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "신고 사유가 너무 깁니다."
+    );
+  }
+
+  const limitRef = db.collection("report_limits").doc(reporterUid);
+  const reportRef = db.collection("reports").doc();
+  const nowMs = Date.now();
+
+  await db.runTransaction(async (transaction) => {
+    const limitSnapshot = await transaction.get(limitRef);
+    const state = resolveRateLimit(
+      limitSnapshot,
+      nowMs,
+      REPORT_RATE_WINDOW_MS
+    );
+    if (state.count >= REPORT_RATE_MAX) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "신고 요청이 너무 많습니다. 잠시 후 다시 시도해주세요."
+      );
+    }
+
+    transaction.set(
+      limitRef,
+      rateLimitUpdate(state.windowStart, state.count + 1),
+      { merge: true }
+    );
+    transaction.set(reportRef, {
+      reporterUid,
+      targetUid,
+      targetContentId,
+      reason,
+      status: "pending",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true, reportId: reportRef.id };
+});
 
 exports.sendChatNotification = functions.firestore
   .document("chat_rooms/{roomId}/messages/{messageId}")
